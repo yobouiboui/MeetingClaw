@@ -7,6 +7,7 @@ import {
   estimateProviderLatency,
 } from '../lib/copilot'
 import { createDemoSnapshot, demoTranscriptQueue } from '../lib/demo-data'
+import { mergeProviderConfigs, testProviderConfig } from '../lib/providers'
 import {
   fetchSnapshot,
   isTauriRuntime,
@@ -17,7 +18,7 @@ import {
   toggleOverlay,
   updateSettings,
 } from '../lib/tauri'
-import type { AppSettings, AppSnapshot, Playbook, TranscriptSegment } from '../types'
+import type { AppSettings, AppSnapshot, Playbook, ProviderConfig, TranscriptSegment } from '../types'
 
 const PLAYBOOKS_STORAGE_KEY = 'meetingclaw.playbooks'
 const BROWSER_SNAPSHOT_STORAGE_KEY = 'meetingclaw.browserSnapshot'
@@ -83,6 +84,18 @@ function loadBrowserSnapshot(playbooks: Playbook[]) {
     return JSON.parse(raw) as AppSnapshot
   } catch {
     return createDemoSnapshot(playbooks)
+  }
+}
+
+function hydrateSnapshot(snapshot: AppSnapshot, playbooks: Playbook[]) {
+  const nextSnapshot = {
+    ...snapshot,
+    providers: mergeProviderConfigs(snapshot.settings, snapshot.providers),
+  }
+
+  return {
+    ...nextSnapshot,
+    session: applyDraftToSession(nextSnapshot, playbooks),
   }
 }
 
@@ -190,6 +203,8 @@ type AppStore = {
   toggleOverlayWindow: () => Promise<void>
   toggleMain: () => Promise<void>
   saveSettings: (settings: AppSettings) => Promise<void>
+  updateProviderConfig: (providerId: string, patch: Partial<ProviderConfig>) => void
+  testProviderConnection: (providerId: string) => void
   addPlaybook: (playbook: Omit<Playbook, 'id'>) => void
   togglePlaybook: (playbookId: string) => void
   replacePlaybooks: (playbooks: Playbook[]) => void
@@ -246,7 +261,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     if (!isTauriRuntime()) {
-      const snapshot = loadBrowserSnapshot(get().playbooks)
+      const snapshot = hydrateSnapshot(loadBrowserSnapshot(get().playbooks), get().playbooks)
       set({
         initialized: true,
         snapshot,
@@ -256,13 +271,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const snapshot = await fetchSnapshot()
     if (snapshot) {
-      set({ snapshot, initialized: true, error: null })
-      await registerShortcuts(snapshot, get())
+      const hydratedSnapshot = hydrateSnapshot(snapshot, get().playbooks)
+      set({ snapshot: hydratedSnapshot, initialized: true, error: null })
+      await registerShortcuts(hydratedSnapshot, get())
     }
 
     const unlisten = await listenForSnapshots(async (nextSnapshot) => {
-      set({ snapshot: nextSnapshot, error: null })
-      await registerShortcuts(nextSnapshot, get())
+      const hydratedSnapshot = hydrateSnapshot(nextSnapshot, get().playbooks)
+      set({ snapshot: hydratedSnapshot, error: null })
+      await registerShortcuts(hydratedSnapshot, get())
     })
 
     window.addEventListener(
@@ -383,6 +400,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const nextSnapshot = {
         ...snapshot,
         settings,
+        providers: mergeProviderConfigs(settings, snapshot.providers),
         session: applyDraftToSession({ ...snapshot, settings }, get().playbooks),
       }
       persistBrowserSnapshot(nextSnapshot)
@@ -394,7 +412,49 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     const snapshot = await updateSettings(settings)
-    set({ snapshot, error: null })
+    set({ snapshot: hydrateSnapshot(snapshot, get().playbooks), error: null })
+  },
+  updateProviderConfig: (providerId, patch) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const nextProviders = snapshot.providers.map((provider) =>
+      provider.providerId === providerId ? { ...provider, ...patch } : provider,
+    )
+
+    const nextSnapshot = {
+      ...snapshot,
+      providers: nextProviders,
+    }
+    persistBrowserSnapshot(nextSnapshot)
+    set({ snapshot: nextSnapshot, error: null })
+  },
+  testProviderConnection: (providerId) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const nextProviders = snapshot.providers.map((provider) => {
+      if (provider.providerId !== providerId) {
+        return provider
+      }
+
+      return {
+        ...provider,
+        status: testProviderConfig(provider),
+        lastCheckedAt: new Date().toISOString(),
+      }
+    })
+
+    const nextSnapshot = {
+      ...snapshot,
+      providers: nextProviders,
+    }
+    persistBrowserSnapshot(nextSnapshot)
+    set({ snapshot: nextSnapshot, error: null })
   },
   addPlaybook: (playbook) => {
     const nextPlaybooks = [

@@ -54,6 +54,21 @@ export type AppSettings = {
   }
 }
 
+export type ProviderConnectionStatus = 'configured' | 'missing-auth' | 'offline' | 'unknown'
+
+export type ProviderConfig = {
+  providerId: string
+  enabled: boolean
+  endpoint: string
+  model: string
+  apiKeyHint: string
+  authMode: string
+  supportsVision: boolean
+  supportsStreaming: boolean
+  lastCheckedAt: string | null
+  status: ProviderConnectionStatus
+}
+
 export type SessionPerformance = {
   latencyMs: number
   transcriptionAccuracy: number
@@ -84,6 +99,7 @@ export type Diagnostics = {
 
 export type AppSnapshot = {
   settings: AppSettings
+  providers: ProviderConfig[]
   session: SessionState
   history: MeetingRecord[]
   diagnostics: Diagnostics

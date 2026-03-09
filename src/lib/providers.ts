@@ -1,4 +1,4 @@
-import type { AppSettings } from '../types'
+import type { AppSettings, ProviderConfig, ProviderConnectionStatus } from '../types'
 
 export type ProviderDescriptor = {
   id: string
@@ -85,4 +85,53 @@ export function resolveProviderDescriptor(settings: AppSettings) {
 export function describeProviderRouting(settings: AppSettings) {
   const descriptor = resolveProviderDescriptor(settings)
   return `${descriptor.id} | ${descriptor.style} | ${settings.localMode ? 'Local-first routing' : 'Cloud routing'}`
+}
+
+export function createProviderConfigs(settings: AppSettings): ProviderConfig[] {
+  return Object.values(providerDescriptors).map((descriptor) => ({
+    providerId: descriptor.id,
+    enabled: descriptor.id === settings.aiProvider || descriptor.id === 'Ollama',
+    endpoint: descriptor.endpoint,
+    model: descriptor.defaultModel,
+    apiKeyHint: descriptor.id === 'Ollama' ? 'Local daemon, no key required' : '',
+    authMode: descriptor.authMode,
+    supportsVision: descriptor.supportsVision,
+    supportsStreaming: descriptor.supportsStreaming,
+    lastCheckedAt: null,
+    status: descriptor.id === 'Ollama' ? 'configured' : 'unknown',
+  }))
+}
+
+export function mergeProviderConfigs(settings: AppSettings, providers?: ProviderConfig[]) {
+  const fallback = createProviderConfigs(settings)
+  if (!providers || providers.length === 0) {
+    return fallback
+  }
+
+  return fallback.map((descriptorConfig) => {
+    const persisted = providers.find((provider) => provider.providerId === descriptorConfig.providerId)
+    return persisted ? { ...descriptorConfig, ...persisted } : descriptorConfig
+  })
+}
+
+export function testProviderConfig(config: ProviderConfig): ProviderConnectionStatus {
+  if (!config.enabled) {
+    return 'offline'
+  }
+
+  if (config.providerId === 'Ollama') {
+    return config.endpoint.includes('127.0.0.1') || config.endpoint.includes('localhost')
+      ? 'configured'
+      : 'offline'
+  }
+
+  if (!config.apiKeyHint.trim()) {
+    return 'missing-auth'
+  }
+
+  if (!config.endpoint.startsWith('http')) {
+    return 'offline'
+  }
+
+  return 'configured'
 }

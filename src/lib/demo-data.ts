@@ -1,4 +1,5 @@
 import { buildCopilotDraft, describeAudioPipeline, describeContextPipeline, estimateProviderLatency } from './copilot'
+import { createProviderConfigs } from './providers'
 import type { AppSnapshot, AppSettings, Playbook, ScreenInsight, TranscriptSegment } from '../types'
 
 const defaultSettings: AppSettings = {
@@ -46,6 +47,7 @@ export function createDemoSnapshot(playbooks: Playbook[]): AppSnapshot {
 
   return {
     settings: defaultSettings,
+    providers: createProviderConfigs(defaultSettings),
     session: {
       active: false,
       sessionId: null,

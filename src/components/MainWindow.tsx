@@ -7,6 +7,7 @@ import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { NotesPanel } from './NotesPanel'
 import { PlaybooksPanel } from './PlaybooksPanel'
+import { ProvidersPanel } from './ProvidersPanel'
 import { SessionComposerPanel } from './SessionComposerPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { ShellCard } from './ShellCard'
@@ -18,6 +19,8 @@ export function MainWindow() {
   const [historyQuery, setHistoryQuery] = useState('')
   const snapshot = useAppStore((state) => state.snapshot)
   const playbooks = useAppStore((state) => state.playbooks)
+  const updateProviderConfig = useAppStore((state) => state.updateProviderConfig)
+  const testProviderConnection = useAppStore((state) => state.testProviderConnection)
   const startMeeting = useAppStore((state) => state.startMeeting)
   const stopMeeting = useAppStore((state) => state.stopMeeting)
   const toggleOverlayWindow = useAppStore((state) => state.toggleOverlayWindow)
@@ -38,7 +41,7 @@ export function MainWindow() {
     )
   }
 
-  const { session, settings, history, diagnostics } = snapshot
+  const { session, settings, history, diagnostics, providers } = snapshot
   const promptPreview = composeSystemPrompt(settings, playbooks, session.transcript, session.screenContext)
 
   return (
@@ -149,12 +152,20 @@ export function MainWindow() {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <PlaybooksPanel
-            onCreate={addPlaybook}
-            onReplace={replacePlaybooks}
-            onToggle={togglePlaybook}
-            playbooks={playbooks}
-          />
+          <div className="grid gap-6">
+            <ProvidersPanel
+              activeProviderId={settings.aiProvider}
+              onTest={testProviderConnection}
+              onUpdate={updateProviderConfig}
+              providers={providers}
+            />
+            <PlaybooksPanel
+              onCreate={addPlaybook}
+              onReplace={replacePlaybooks}
+              onToggle={togglePlaybook}
+              playbooks={playbooks}
+            />
+          </div>
           <div className="grid gap-6">
             <ShellCard
               title="Prompt routing"
