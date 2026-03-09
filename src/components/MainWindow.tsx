@@ -3,6 +3,7 @@ import { Activity, Gauge, Layers3, Mic, MonitorSmartphone, Sparkles } from 'luci
 import { composeSystemPrompt } from '../lib/copilot'
 import { formatTimestamp } from '../lib/format'
 import { useMicrophoneCapture } from '../hooks/useMicrophoneCapture'
+import { useScreenCapture } from '../hooks/useScreenCapture'
 import { useAppStore } from '../store/app-store'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { HistoryPanel } from './HistoryPanel'
@@ -18,7 +19,6 @@ import { TranscriptPanel } from './TranscriptPanel'
 
 export function MainWindow() {
   const [historyQuery, setHistoryQuery] = useState('')
-  const microphoneCapture = useMicrophoneCapture()
   const error = useAppStore((state) => state.error)
   const snapshot = useAppStore((state) => state.snapshot)
   const playbooks = useAppStore((state) => state.playbooks)
@@ -35,6 +35,12 @@ export function MainWindow() {
   const injectTranscriptLine = useAppStore((state) => state.injectTranscriptLine)
   const transcribeAudioFile = useAppStore((state) => state.transcribeAudioFile)
   const addScreenInsight = useAppStore((state) => state.addScreenInsight)
+  const sessionActive = snapshot?.session.active ?? false
+  const microphoneCapture = useMicrophoneCapture()
+  const screenCapture = useScreenCapture({
+    active: sessionActive,
+    onInsight: addScreenInsight,
+  })
 
   if (!snapshot) {
     return (
@@ -110,6 +116,12 @@ export function MainWindow() {
               >
                 {microphoneCapture.isRecording ? 'Stop mic capture' : 'Start mic capture'}
               </button>
+              <button
+                className="rounded-2xl border border-slate-700 bg-slate-950/50 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500"
+                onClick={() => void (screenCapture.isCapturing ? screenCapture.stop() : screenCapture.start())}
+              >
+                {screenCapture.isCapturing ? 'Stop screen capture' : 'Start screen capture'}
+              </button>
             </div>
           </div>
           <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -157,6 +169,11 @@ export function MainWindow() {
           {microphoneCapture.error ? (
             <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
               {microphoneCapture.error}
+            </div>
+          ) : null}
+          {screenCapture.error ? (
+            <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              {screenCapture.error}
             </div>
           ) : null}
         </header>
