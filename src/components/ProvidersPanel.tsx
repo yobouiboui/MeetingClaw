@@ -18,7 +18,10 @@ const statusTone: Record<ProviderConfig['status'], string> = {
 
 export function ProvidersPanel({ providers, activeProviderId, onUpdate, onTest }: ProvidersPanelProps) {
   return (
-    <ShellCard title="Provider connections" subtitle="Prepare real API wiring for Windows-native routing and fallback selection.">
+    <ShellCard
+      title="Provider connections"
+      subtitle="Prepare real API wiring for Windows-native routing and fallback selection."
+    >
       <div className="grid gap-4">
         {providers.map((provider) => (
           <article key={provider.providerId} className="rounded-2xl border border-slate-800/80 bg-slate-950/45 p-4">
@@ -26,8 +29,8 @@ export function ProvidersPanel({ providers, activeProviderId, onUpdate, onTest }
               <div>
                 <h3 className="text-sm font-semibold text-slate-100">{provider.providerId}</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  {provider.supportsStreaming ? 'Streaming' : 'No streaming'} •{' '}
-                  {provider.supportsVision ? 'Vision' : 'Text/OCR only'} • {provider.authMode}
+                  {provider.supportsStreaming ? 'Streaming' : 'No streaming'} |{' '}
+                  {provider.supportsVision ? 'Vision' : 'Text/OCR only'} | {provider.authMode}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -64,7 +67,11 @@ export function ProvidersPanel({ providers, activeProviderId, onUpdate, onTest }
                 <input
                   className="rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-slate-100"
                   onChange={(event) => onUpdate(provider.providerId, { apiKeyHint: event.target.value })}
-                  placeholder={provider.providerId === 'Ollama' ? 'No key needed for local daemon' : 'Paste or describe the configured secret'}
+                  placeholder={
+                    provider.providerId === 'Ollama'
+                      ? 'No key needed for local daemon'
+                      : 'Paste the real API key or a local secret reference'
+                  }
                   value={provider.apiKeyHint}
                 />
               </label>
@@ -80,9 +87,7 @@ export function ProvidersPanel({ providers, activeProviderId, onUpdate, onTest }
                 Enabled
               </label>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500">
-                  Last checked: {formatTimestamp(provider.lastCheckedAt)}
-                </span>
+                <span className="text-xs text-slate-500">Last checked: {formatTimestamp(provider.lastCheckedAt)}</span>
                 <button
                   className="rounded-2xl border border-slate-700 bg-slate-950/50 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500"
                   onClick={() => onTest(provider.providerId)}

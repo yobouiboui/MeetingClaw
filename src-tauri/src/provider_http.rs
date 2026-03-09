@@ -34,6 +34,83 @@ pub async fn test_provider_connection(provider: &ProviderConfig) -> Result<Strin
                 Err(format!("OpenAI returned HTTP {}", response.status()))
             }
         }
+        "Claude" => {
+            let token = provider.api_key_hint.trim();
+            if token.is_empty() {
+                return Err("Missing Claude API key".to_string());
+            }
+
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .build()
+                .map_err(|err| err.to_string())?;
+
+            let response = client
+                .post(format!("{}/messages", trim_trailing_slash(&provider.endpoint)))
+                .header("x-api-key", token)
+                .header("anthropic-version", "2023-06-01")
+                .header(CONTENT_TYPE, "application/json")
+                .json(&AnthropicMessagesRequest {
+                    model: provider.model.clone(),
+                    max_tokens: 16,
+                    system: Some("Return one word.".to_string()),
+                    messages: vec![AnthropicMessageInput {
+                        role: "user".to_string(),
+                        content: "ping".to_string(),
+                    }],
+                })
+                .send()
+                .await
+                .map_err(|err| err.to_string())?;
+
+            if response.status().is_success() {
+                Ok("configured".to_string())
+            } else {
+                Err(format!("Claude returned HTTP {}", response.status()))
+            }
+        }
+        "Gemini" => {
+            let token = provider.api_key_hint.trim();
+            if token.is_empty() {
+                return Err("Missing Gemini API key".to_string());
+            }
+
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .build()
+                .map_err(|err| err.to_string())?;
+
+            let response = client
+                .post(format!(
+                    "{}/v1beta/models/{}:generateContent",
+                    trim_google_endpoint(&provider.endpoint),
+                    provider.model
+                ))
+                .header("x-goog-api-key", token)
+                .header(CONTENT_TYPE, "application/json")
+                .json(&GeminiGenerateContentRequest {
+                    contents: vec![GeminiContent {
+                        role: Some("user".to_string()),
+                        parts: vec![GeminiPart {
+                            text: Some("ping".to_string()),
+                        }],
+                    }],
+                    generation_config: Some(GeminiGenerationConfig {
+                        temperature: Some(0.0),
+                        max_output_tokens: Some(8),
+                        response_mime_type: None,
+                    }),
+                })
+                .send()
+                .await
+                .map_err(|err| err.to_string())?;
+
+            if response.status().is_success() {
+                Ok("configured".to_string())
+            } else {
+                Err(format!("Gemini returned HTTP {}", response.status()))
+            }
+        }
         "Ollama" => {
             let client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(5))
@@ -66,6 +143,8 @@ pub async fn generate_copilot_preview(
 
     match provider.provider_id.as_str() {
         "OpenAI" => generate_openai_preview(provider, request).await,
+        "Claude" => generate_claude_preview(provider, request).await,
+        "Gemini" => generate_gemini_preview(provider, request).await,
         "Ollama" => generate_ollama_preview(provider, request).await,
         other => Err(format!("HTTP adapter not implemented yet for {}", other)),
     }
@@ -189,6 +268,127 @@ async fn generate_ollama_preview(
     ))
 }
 
+async fn generate_claude_preview(
+    provider: &ProviderConfig,
+    request: &CopilotGenerationRequest,
+) -> Result<CopilotGenerationResponse, String> {
+    let token = provider.api_key_hint.trim();
+    if token.is_empty() {
+        return Err("Missing Claude API key".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|err| err.to_string())?;
+
+    let response = client
+        .post(format!("{}/messages", trim_trailing_slash(&provider.endpoint)))
+        .header("x-api-key", token)
+        .header("anthropic-version", "2023-06-01")
+        .header(CONTENT_TYPE, "application/json")
+        .json(&AnthropicMessagesRequest {
+            model: provider.model.clone(),
+            max_tokens: 1200,
+            system: Some(build_system_prompt(&request.settings)),
+            messages: vec![AnthropicMessageInput {
+                role: "user".to_string(),
+                content: build_user_prompt(request),
+            }],
+        })
+        .send()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    if !response.status().is_success() {
+        let error_body = response.text().await.unwrap_or_default();
+        return Err(format!("Claude request failed: {}", error_body));
+    }
+
+    let payload: AnthropicMessagesResponse = response.json().await.map_err(|err| err.to_string())?;
+    let content = payload
+        .content
+        .into_iter()
+        .find_map(|block| block.text)
+        .ok_or_else(|| "Claude returned no text content".to_string())?;
+
+    let structured = parse_structured_output(&content)?;
+    Ok(to_generation_response(
+        provider,
+        request,
+        structured,
+        estimate_provider_latency(&request.settings),
+        true,
+    ))
+}
+
+async fn generate_gemini_preview(
+    provider: &ProviderConfig,
+    request: &CopilotGenerationRequest,
+) -> Result<CopilotGenerationResponse, String> {
+    let token = provider.api_key_hint.trim();
+    if token.is_empty() {
+        return Err("Missing Gemini API key".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|err| err.to_string())?;
+
+    let response = client
+        .post(format!(
+            "{}/v1beta/models/{}:generateContent",
+            trim_google_endpoint(&provider.endpoint),
+            provider.model
+        ))
+        .header("x-goog-api-key", token)
+        .header(CONTENT_TYPE, "application/json")
+        .json(&GeminiGenerateContentRequest {
+            contents: vec![GeminiContent {
+                role: Some("user".to_string()),
+                parts: vec![GeminiPart {
+                    text: Some(build_user_prompt(request)),
+                }],
+            }],
+            generation_config: Some(GeminiGenerationConfig {
+                temperature: Some(0.2),
+                max_output_tokens: Some(1200),
+                response_mime_type: Some("application/json".to_string()),
+            }),
+        })
+        .send()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    if !response.status().is_success() {
+        let error_body = response.text().await.unwrap_or_default();
+        return Err(format!("Gemini request failed: {}", error_body));
+    }
+
+    let payload: GeminiGenerateContentResponse = response.json().await.map_err(|err| err.to_string())?;
+    let content = payload
+        .candidates
+        .into_iter()
+        .find_map(|candidate| {
+            candidate
+                .content
+                .parts
+                .into_iter()
+                .find_map(|part| part.text)
+        })
+        .ok_or_else(|| "Gemini returned no text content".to_string())?;
+
+    let structured = parse_structured_output(&content)?;
+    Ok(to_generation_response(
+        provider,
+        request,
+        structured,
+        estimate_provider_latency(&request.settings),
+        true,
+    ))
+}
+
 fn to_generation_response(
     provider: &ProviderConfig,
     request: &CopilotGenerationRequest,
@@ -291,6 +491,10 @@ fn trim_trailing_slash(value: &str) -> String {
     value.trim_end_matches('/').to_string()
 }
 
+fn trim_google_endpoint(value: &str) -> String {
+    trim_trailing_slash(value).trim_end_matches("/v1beta").to_string()
+}
+
 fn estimate_provider_latency(settings: &AppSettings) -> u32 {
     let base = match settings.ai_provider.as_str() {
         "OpenAI" => 180,
@@ -387,6 +591,75 @@ struct OllamaGenerateResponse {
     total_duration: Option<u64>,
 }
 
+#[derive(Debug, Serialize)]
+struct AnthropicMessagesRequest {
+    model: String,
+    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<String>,
+    messages: Vec<AnthropicMessageInput>,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicMessageInput {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicMessagesResponse {
+    content: Vec<AnthropicContentBlock>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicContentBlock {
+    #[serde(default)]
+    text: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiGenerateContentRequest {
+    contents: Vec<GeminiContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generation_config: Option<GeminiGenerationConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GeminiContent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<String>,
+    parts: Vec<GeminiPart>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GeminiPart {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiGenerationConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_mime_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GeminiGenerateContentResponse {
+    candidates: Vec<GeminiCandidate>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiCandidate {
+    content: GeminiContent,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StructuredOutput {
@@ -404,4 +677,38 @@ struct StructuredSuggestion {
     kind: Option<String>,
     #[serde(default)]
     priority: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_structured_output, trim_google_endpoint};
+
+    #[test]
+    fn parses_structured_json_output() {
+        let raw = r#"{
+            "suggestions":[
+                {"title":"Answer framing","body":"Lead with the outcome.","kind":"reply","priority":"high"}
+            ],
+            "liveSummary":"Short summary",
+            "notes":"- note",
+            "emailDraft":"Subject: Follow-up"
+        }"#;
+
+        let parsed = parse_structured_output(raw).expect("json should parse");
+        assert_eq!(parsed.suggestions.len(), 1);
+        assert_eq!(parsed.live_summary, "Short summary");
+        assert_eq!(parsed.suggestions[0].kind.as_deref(), Some("reply"));
+    }
+
+    #[test]
+    fn normalizes_google_endpoint_suffix() {
+        assert_eq!(
+            trim_google_endpoint("https://generativelanguage.googleapis.com/v1beta"),
+            "https://generativelanguage.googleapis.com"
+        );
+        assert_eq!(
+            trim_google_endpoint("https://generativelanguage.googleapis.com"),
+            "https://generativelanguage.googleapis.com"
+        );
+    }
 }
