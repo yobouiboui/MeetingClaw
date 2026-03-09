@@ -20,6 +20,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
   const ocrWorkerRef = useRef<TesseractWorker | null>(null)
   const ocrPromiseRef = useRef<Promise<TesseractWorker> | null>(null)
   const ocrBusyRef = useRef(false)
+  const previousFingerprintRef = useRef<Uint8ClampedArray | null>(null)
 
   const ensureWorker = async () => {
     if (ocrWorkerRef.current) {
@@ -69,6 +70,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
     videoRef.current = null
+    previousFingerprintRef.current = null
     setIsCapturing(false)
     void terminateWorker()
   }, [active])
@@ -79,6 +81,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
         window.clearInterval(intervalRef.current)
       }
       streamRef.current?.getTracks().forEach((track) => track.stop())
+      previousFingerprintRef.current = null
       void terminateWorker()
     }
   }, [])
@@ -110,8 +113,15 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
 
       const canvas = document.createElement('canvas')
       const context = canvas.getContext('2d')
+      const fingerprintCanvas = document.createElement('canvas')
+      const fingerprintContext = fingerprintCanvas.getContext('2d', { willReadFrequently: true })
+      const ocrCanvas = document.createElement('canvas')
+      const ocrContext = ocrCanvas.getContext('2d')
       if (!context) {
         throw new Error('Failed to initialize screen capture canvas.')
+      }
+      if (!fingerprintContext || !ocrContext) {
+        throw new Error('Failed to initialize screen analysis canvases.')
       }
 
       streamRef.current = stream
@@ -125,6 +135,9 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
         context.drawImage(video, 0, 0, canvas.width, canvas.height)
+        fingerprintCanvas.width = 64
+        fingerprintCanvas.height = 36
+        fingerprintContext.drawImage(video, 0, 0, fingerprintCanvas.width, fingerprintCanvas.height)
 
         const sampled = context.getImageData(
           Math.max(0, Math.floor(canvas.width / 2) - 8),
@@ -140,6 +153,30 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
 
         const averageLuma = Math.round(total / (sampled.data.length / 4) / 3)
         const frameDetail = `Captured display frame ${canvas.width}x${canvas.height}. Center luminance ${averageLuma}.`
+        const fingerprint = fingerprintContext.getImageData(
+          0,
+          0,
+          fingerprintCanvas.width,
+          fingerprintCanvas.height,
+        ).data
+        const previousFingerprint = previousFingerprintRef.current
+
+        if (previousFingerprint) {
+          let delta = 0
+          for (let index = 0; index < fingerprint.length; index += 16) {
+            delta += Math.abs(fingerprint[index] - previousFingerprint[index])
+            delta += Math.abs(fingerprint[index + 1] - previousFingerprint[index + 1])
+            delta += Math.abs(fingerprint[index + 2] - previousFingerprint[index + 2])
+          }
+
+          const averageDelta = delta / ((fingerprint.length / 16) * 3)
+          if (averageDelta < 8) {
+            onInsight('Screen capture sample', `${frameDetail} Screen remained visually stable.`)
+            return
+          }
+        }
+
+        previousFingerprintRef.current = new Uint8ClampedArray(fingerprint)
 
         if (ocrBusyRef.current) {
           onInsight('Screen capture sample', frameDetail)
@@ -149,8 +186,13 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
         ocrBusyRef.current = true
         try {
           const worker = await ensureWorker()
+          const targetWidth = Math.min(1280, canvas.width)
+          const targetHeight = Math.max(1, Math.round((canvas.height / canvas.width) * targetWidth))
+          ocrCanvas.width = targetWidth
+          ocrCanvas.height = targetHeight
+          ocrContext.drawImage(video, 0, 0, targetWidth, targetHeight)
           const frameBlob = await new Promise<Blob | null>((resolve) => {
-            canvas.toBlob(resolve, 'image/png')
+            ocrCanvas.toBlob(resolve, 'image/png')
           })
 
           if (!frameBlob) {
@@ -205,6 +247,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
     videoRef.current = null
+    previousFingerprintRef.current = null
     setIsCapturing(false)
     void terminateWorker()
   }
