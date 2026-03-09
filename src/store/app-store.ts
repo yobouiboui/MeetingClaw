@@ -146,6 +146,8 @@ type AppStore = {
   saveSettings: (settings: AppSettings) => Promise<void>
   addPlaybook: (playbook: Omit<Playbook, 'id'>) => void
   togglePlaybook: (playbookId: string) => void
+  injectTranscriptLine: (speaker: string, text: string) => void
+  addScreenInsight: (headline: string, detail: string) => void
 }
 
 async function registerShortcuts(snapshot: AppSnapshot, store: AppStore) {
@@ -409,5 +411,80 @@ export const useAppStore = create<AppStore>((set, get) => ({
             },
           }
     set({ playbooks: nextPlaybooks, snapshot: nextSnapshot })
+  },
+  injectTranscriptLine: (speaker, text) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const nextTranscript = [
+      ...snapshot.session.transcript,
+      {
+        id: crypto.randomUUID(),
+        speaker,
+        text,
+        timestamp: new Date().toISOString(),
+        confidence: 0.99,
+      },
+    ]
+
+    const draft = buildCopilotDraft(
+      snapshot.settings,
+      get().playbooks,
+      nextTranscript,
+      snapshot.session.screenContext,
+    )
+
+    set({
+      snapshot: {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          transcript: nextTranscript,
+          suggestions: draft.suggestions,
+          liveSummary: draft.liveSummary,
+          notes: draft.notes,
+          emailDraft: draft.emailDraft,
+        },
+      },
+    })
+  },
+  addScreenInsight: (headline, detail) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    const nextScreenContext = [
+      {
+        id: crypto.randomUUID(),
+        headline,
+        detail,
+        capturedAt: new Date().toLocaleTimeString(),
+      },
+      ...snapshot.session.screenContext,
+    ].slice(0, 4)
+
+    const draft = buildCopilotDraft(
+      snapshot.settings,
+      get().playbooks,
+      snapshot.session.transcript,
+      nextScreenContext,
+    )
+
+    set({
+      snapshot: {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          screenContext: nextScreenContext,
+          suggestions: draft.suggestions,
+          liveSummary: draft.liveSummary,
+          notes: draft.notes,
+          emailDraft: draft.emailDraft,
+        },
+      },
+    })
   },
 }))

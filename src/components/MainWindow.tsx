@@ -6,6 +6,7 @@ import { useAppStore } from '../store/app-store'
 import { HistoryPanel } from './HistoryPanel'
 import { NotesPanel } from './NotesPanel'
 import { PlaybooksPanel } from './PlaybooksPanel'
+import { SessionComposerPanel } from './SessionComposerPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { ShellCard } from './ShellCard'
 import { StatusBadge } from './StatusBadge'
@@ -22,6 +23,8 @@ export function MainWindow() {
   const saveSettings = useAppStore((state) => state.saveSettings)
   const addPlaybook = useAppStore((state) => state.addPlaybook)
   const togglePlaybook = useAppStore((state) => state.togglePlaybook)
+  const injectTranscriptLine = useAppStore((state) => state.injectTranscriptLine)
+  const addScreenInsight = useAppStore((state) => state.addScreenInsight)
 
   if (!snapshot) {
     return (
@@ -146,17 +149,23 @@ export function MainWindow() {
             onToggle={togglePlaybook}
             playbooks={playbooks}
           />
-          <ShellCard
-            title="Prompt routing"
-            subtitle="Live prompt composition preview from meeting mode, provider and active playbooks."
-          >
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-950/45 p-4">
-              <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Realtime composition</p>
-              <pre className="whitespace-pre-wrap text-sm leading-6 text-slate-200">
-                {promptPreview}
-              </pre>
-            </div>
-          </ShellCard>
+          <div className="grid gap-6">
+            <ShellCard
+              title="Prompt routing"
+              subtitle="Live prompt composition preview from meeting mode, provider and active playbooks."
+            >
+              <div className="rounded-2xl border border-slate-800/80 bg-slate-950/45 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Realtime composition</p>
+                <pre className="whitespace-pre-wrap text-sm leading-6 text-slate-200">
+                  {promptPreview}
+                </pre>
+              </div>
+            </ShellCard>
+            <SessionComposerPanel
+              onAddScreenInsight={addScreenInsight}
+              onAddTranscript={injectTranscriptLine}
+            />
+          </div>
         </div>
       </div>
     </main>
