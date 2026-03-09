@@ -1,5 +1,6 @@
 mod commands;
 mod models;
+mod provider_http;
 mod simulator;
 mod state;
 

@@ -60,7 +60,7 @@ export function ProvidersPanel({ providers, activeProviderId, onUpdate, onTest }
                 />
               </label>
               <label className="grid gap-2 text-sm md:col-span-2">
-                <span className="text-slate-300">API key hint</span>
+                <span className="text-slate-300">API key or hint</span>
                 <input
                   className="rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-slate-100"
                   onChange={(event) => onUpdate(provider.providerId, { apiKeyHint: event.target.value })}

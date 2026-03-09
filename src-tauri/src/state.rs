@@ -231,6 +231,49 @@ impl AppState {
         })
     }
 
+    pub fn provider_config(&self, provider_id: &str) -> Result<ProviderConfig, String> {
+        let runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "state poisoned".to_string())?;
+
+        runtime
+            .providers
+            .iter()
+            .find(|provider| provider.provider_id == provider_id)
+            .cloned()
+            .ok_or_else(|| format!("provider {} not found", provider_id))
+    }
+
+    pub fn apply_provider_status(
+        &self,
+        provider_id: &str,
+        status: String,
+    ) -> Result<AppSnapshot, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "state poisoned".to_string())?;
+
+        let provider = runtime
+            .providers
+            .iter_mut()
+            .find(|provider| provider.provider_id == provider_id)
+            .ok_or_else(|| format!("provider {} not found", provider_id))?;
+
+        provider.status = status;
+        provider.last_checked_at = Some(Utc::now().to_rfc3339());
+
+        self.persist(&runtime)?;
+        Ok(AppSnapshot {
+            settings: runtime.settings.clone(),
+            providers: runtime.providers.clone(),
+            session: runtime.session.clone(),
+            history: runtime.history.clone(),
+            diagnostics: Diagnostics::default(),
+        })
+    }
+
     pub fn generate_copilot_preview(
         &self,
         request: CopilotGenerationRequest,
