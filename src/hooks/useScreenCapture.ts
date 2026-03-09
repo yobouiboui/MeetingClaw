@@ -5,6 +5,11 @@ type UseScreenCaptureOptions = {
   active: boolean
 }
 
+type TesseractWorker = {
+  recognize: (image: Blob | string) => Promise<{ data: { text: string } }>
+  terminate: () => Promise<unknown>
+}
+
 export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions) {
   const [isCapturing, setIsCapturing] = useState(false)
   const [isSupported, setIsSupported] = useState(false)
@@ -12,6 +17,36 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
   const streamRef = useRef<MediaStream | null>(null)
   const intervalRef = useRef<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const ocrWorkerRef = useRef<TesseractWorker | null>(null)
+  const ocrPromiseRef = useRef<Promise<TesseractWorker> | null>(null)
+  const ocrBusyRef = useRef(false)
+
+  const ensureWorker = async () => {
+    if (ocrWorkerRef.current) {
+      return ocrWorkerRef.current
+    }
+
+    if (!ocrPromiseRef.current) {
+      ocrPromiseRef.current = import('tesseract.js').then(async ({ createWorker }) => {
+        const worker = (await createWorker('eng')) as unknown as TesseractWorker
+        ocrWorkerRef.current = worker
+        return worker
+      })
+    }
+
+    return ocrPromiseRef.current
+  }
+
+  const terminateWorker = async () => {
+    const worker = ocrWorkerRef.current
+    ocrWorkerRef.current = null
+    ocrPromiseRef.current = null
+    ocrBusyRef.current = false
+
+    if (worker) {
+      await worker.terminate()
+    }
+  }
 
   useEffect(() => {
     setIsSupported(
@@ -35,6 +70,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
     streamRef.current = null
     videoRef.current = null
     setIsCapturing(false)
+    void terminateWorker()
   }, [active])
 
   useEffect(() => {
@@ -43,6 +79,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
         window.clearInterval(intervalRef.current)
       }
       streamRef.current?.getTracks().forEach((track) => track.stop())
+      void terminateWorker()
     }
   }, [])
 
@@ -80,7 +117,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
       streamRef.current = stream
       videoRef.current = video
 
-      const pushInsight = () => {
+      const pushInsight = async () => {
         if (!video.videoWidth || !video.videoHeight) {
           return
         }
@@ -102,14 +139,47 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
         }
 
         const averageLuma = Math.round(total / (sampled.data.length / 4) / 3)
-        onInsight(
-          'Screen capture sample',
-          `Captured display frame ${canvas.width}x${canvas.height}. Center luminance ${averageLuma}.`,
-        )
+        const frameDetail = `Captured display frame ${canvas.width}x${canvas.height}. Center luminance ${averageLuma}.`
+
+        if (ocrBusyRef.current) {
+          onInsight('Screen capture sample', frameDetail)
+          return
+        }
+
+        ocrBusyRef.current = true
+        try {
+          const worker = await ensureWorker()
+          const frameBlob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob(resolve, 'image/png')
+          })
+
+          if (!frameBlob) {
+            onInsight('Screen capture sample', frameDetail)
+            return
+          }
+
+          const result = await worker.recognize(frameBlob)
+          const extractedText = result.data.text.replace(/\s+/g, ' ').trim()
+
+          onInsight(
+            'Screen capture sample',
+            extractedText
+              ? `${frameDetail} OCR: ${extractedText.slice(0, 280)}`
+              : `${frameDetail} OCR: no readable text detected.`,
+          )
+        } catch (reason: unknown) {
+          const message =
+            reason instanceof Error ? reason.message : 'Screen OCR failed for this frame.'
+          onInsight('Screen capture sample', `${frameDetail} OCR error: ${message}`)
+        } finally {
+          ocrBusyRef.current = false
+        }
       }
 
-      pushInsight()
-      intervalRef.current = window.setInterval(pushInsight, 8000)
+      void pushInsight()
+      intervalRef.current = window.setInterval(() => {
+        void pushInsight()
+      }, 8000)
 
       stream.getVideoTracks()[0]?.addEventListener('ended', () => {
         if (intervalRef.current !== null) {
@@ -117,6 +187,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
           intervalRef.current = null
         }
         setIsCapturing(false)
+        void terminateWorker()
       })
 
       setError(null)
@@ -135,6 +206,7 @@ export function useScreenCapture({ onInsight, active }: UseScreenCaptureOptions)
     streamRef.current = null
     videoRef.current = null
     setIsCapturing(false)
+    void terminateWorker()
   }
 
   return {
