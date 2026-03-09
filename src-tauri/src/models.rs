@@ -229,6 +229,15 @@ pub struct ScreenInsightPayload {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AudioChunkPayload {
+    pub audio_base64: String,
+    pub mime_type: String,
+    pub file_name: Option<String>,
+    pub speaker_hint: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Playbook {
     pub id: String,
     pub name: String,

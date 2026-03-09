@@ -97,6 +97,13 @@ export type ScreenInsightPayload = {
   detail: string
 }
 
+export type AudioChunkPayload = {
+  audioBase64: string
+  mimeType: string
+  fileName?: string
+  speakerHint?: string
+}
+
 export type SessionPerformance = {
   latencyMs: number
   transcriptionAccuracy: number

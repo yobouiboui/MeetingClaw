@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
   AppSettings,
   AppSnapshot,
+  AudioChunkPayload,
   CopilotGenerationRequest,
   CopilotGenerationResponse,
   Playbook,
@@ -72,6 +73,10 @@ export async function ingestTranscriptSegment(payload: TranscriptIngestPayload, 
 
 export async function ingestScreenInsight(payload: ScreenInsightPayload, playbooks: Playbook[]) {
   return invoke<AppSnapshot>('ingest_screen_insight', { payload, playbooks })
+}
+
+export async function transcribeAudioChunk(payload: AudioChunkPayload, playbooks: Playbook[]) {
+  return invoke<AppSnapshot>('transcribe_audio_chunk', { payload, playbooks })
 }
 
 export async function listenForSnapshots(handler: (snapshot: AppSnapshot) => void) {

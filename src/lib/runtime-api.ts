@@ -5,6 +5,7 @@ import {
   ingestTranscriptSegment as ingestTauriTranscriptSegment,
   isTauriRuntime,
   testProviderConnection as testTauriProviderConnection,
+  transcribeAudioChunk as transcribeTauriAudioChunk,
   updateProviderConfig as updateTauriProviderConfig,
 } from './tauri'
 import {
@@ -16,6 +17,7 @@ import {
 import { mergeProviderConfigs, resolveProviderDescriptor, testProviderConfig } from './providers'
 import type {
   AppSnapshot,
+  AudioChunkPayload,
   CopilotGenerationRequest,
   CopilotGenerationResponse,
   Playbook,
@@ -148,6 +150,33 @@ export async function ingestRuntimeScreenInsight(
         },
         ...snapshot.session.screenContext,
       ].slice(0, 8),
+    },
+  }
+}
+
+export async function transcribeRuntimeAudio(
+  snapshot: AppSnapshot,
+  playbooks: Playbook[],
+  payload: AudioChunkPayload,
+) {
+  if (isTauriRuntime()) {
+    return transcribeTauriAudioChunk(payload, playbooks)
+  }
+
+  return {
+    ...snapshot,
+    session: {
+      ...snapshot.session,
+      transcript: [
+        ...snapshot.session.transcript,
+        {
+          id: crypto.randomUUID(),
+          speaker: payload.speakerHint ?? 'You',
+          text: '[Browser demo] Audio transcription requires Tauri runtime.',
+          timestamp: new Date().toISOString(),
+          confidence: 0.5,
+        },
+      ],
     },
   }
 }

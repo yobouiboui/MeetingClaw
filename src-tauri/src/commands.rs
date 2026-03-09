@@ -4,8 +4,9 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::{
     models::{
-        AppSettings, AppSnapshot, CopilotGenerationRequest, CopilotGenerationResponse, Playbook,
-        ScreenInsight, ScreenInsightPayload, TranscriptIngestPayload, TranscriptSegment,
+        AppSettings, AppSnapshot, AudioChunkPayload, CopilotGenerationRequest,
+        CopilotGenerationResponse, Playbook, ScreenInsight, ScreenInsightPayload,
+        TranscriptIngestPayload, TranscriptSegment,
     },
     provider_http,
     simulator::spawn_session_runtime,
@@ -174,6 +175,41 @@ pub async fn ingest_screen_insight(
     };
 
     let snapshot = state.ingest_screen_insight(insight)?;
+    let request = build_generation_request(&snapshot, playbooks);
+    let response = match provider_http::generate_copilot_preview(&request).await {
+        Ok(response) => response,
+        Err(_) => state.generate_copilot_preview(request)?,
+    };
+    let snapshot = state.apply_copilot_generation(response)?;
+    state.emit_snapshot(&app)?;
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub async fn transcribe_audio_chunk(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    payload: AudioChunkPayload,
+    playbooks: Vec<Playbook>,
+) -> Result<AppSnapshot, String> {
+    let snapshot = state.snapshot();
+    let provider = snapshot
+        .providers
+        .iter()
+        .find(|provider| provider.provider_id == snapshot.settings.ai_provider && provider.enabled)
+        .cloned()
+        .ok_or_else(|| format!("No enabled provider config found for {}", snapshot.settings.ai_provider))?;
+
+    let text = provider_http::transcribe_audio_chunk(&provider, &snapshot.settings, &payload).await?;
+    let segment = TranscriptSegment {
+        id: Uuid::new_v4().to_string(),
+        speaker: payload.speaker_hint.unwrap_or_else(|| "You".to_string()),
+        text,
+        timestamp: Utc::now().to_rfc3339(),
+        confidence: 0.98,
+    };
+
+    let snapshot = state.ingest_transcript_segment(segment)?;
     let request = build_generation_request(&snapshot, playbooks);
     let response = match provider_http::generate_copilot_preview(&request).await {
         Ok(response) => response,

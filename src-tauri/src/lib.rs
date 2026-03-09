@@ -78,7 +78,8 @@ pub fn run() {
             test_provider_connection,
             generate_copilot_preview,
             ingest_transcript_segment,
-            ingest_screen_insight
+            ingest_screen_insight,
+            transcribe_audio_chunk
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

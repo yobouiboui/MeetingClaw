@@ -1,12 +1,16 @@
 use std::time::Duration;
 
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use base64::Engine;
+use reqwest::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    multipart::{Form, Part},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{
-    AppSettings, CopilotGenerationRequest, CopilotGenerationResponse, ProviderConfig, ScreenInsight,
-    SessionPerformance, SuggestionCard, TranscriptSegment,
+    AppSettings, AudioChunkPayload, CopilotGenerationRequest, CopilotGenerationResponse,
+    ProviderConfig, ScreenInsight, SessionPerformance, SuggestionCard, TranscriptSegment,
 };
 
 pub async fn test_provider_connection(provider: &ProviderConfig) -> Result<String, String> {
@@ -147,6 +151,17 @@ pub async fn generate_copilot_preview(
         "Gemini" => generate_gemini_preview(provider, request).await,
         "Ollama" => generate_ollama_preview(provider, request).await,
         other => Err(format!("HTTP adapter not implemented yet for {}", other)),
+    }
+}
+
+pub async fn transcribe_audio_chunk(
+    provider: &ProviderConfig,
+    settings: &AppSettings,
+    payload: &AudioChunkPayload,
+) -> Result<String, String> {
+    match provider.provider_id.as_str() {
+        "OpenAI" => transcribe_openai_audio(provider, settings, payload).await,
+        other => Err(format!("Transcription adapter not implemented yet for {}", other)),
     }
 }
 
@@ -389,6 +404,60 @@ async fn generate_gemini_preview(
     ))
 }
 
+async fn transcribe_openai_audio(
+    provider: &ProviderConfig,
+    settings: &AppSettings,
+    payload: &AudioChunkPayload,
+) -> Result<String, String> {
+    let token = provider.api_key_hint.trim();
+    if token.is_empty() {
+        return Err("Missing OpenAI API key".to_string());
+    }
+
+    let audio_bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload.audio_base64.as_bytes())
+        .map_err(|err| format!("Invalid audio base64 payload: {}", err))?;
+
+    let file_name = payload
+        .file_name
+        .clone()
+        .unwrap_or_else(|| infer_audio_filename(&payload.mime_type));
+
+    let part = Part::bytes(audio_bytes)
+        .file_name(file_name)
+        .mime_str(&payload.mime_type)
+        .map_err(|err| err.to_string())?;
+
+    let form = Form::new()
+        .text("model", "gpt-4o-mini-transcribe")
+        .text("language", settings.preferred_language.clone())
+        .part("file", part);
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|err| err.to_string())?;
+
+    let response = client
+        .post(format!(
+            "{}/audio/transcriptions",
+            trim_trailing_slash(&provider.endpoint)
+        ))
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    if !response.status().is_success() {
+        let error_body = response.text().await.unwrap_or_default();
+        return Err(format!("OpenAI transcription failed: {}", error_body));
+    }
+
+    let payload: OpenAiTranscriptionResponse = response.json().await.map_err(|err| err.to_string())?;
+    Ok(payload.text)
+}
+
 fn to_generation_response(
     provider: &ProviderConfig,
     request: &CopilotGenerationRequest,
@@ -495,6 +564,16 @@ fn trim_google_endpoint(value: &str) -> String {
     trim_trailing_slash(value).trim_end_matches("/v1beta").to_string()
 }
 
+fn infer_audio_filename(mime_type: &str) -> String {
+    match mime_type {
+        "audio/wav" | "audio/x-wav" => "chunk.wav".to_string(),
+        "audio/webm" => "chunk.webm".to_string(),
+        "audio/mpeg" => "chunk.mp3".to_string(),
+        "audio/mp4" | "audio/m4a" => "chunk.m4a".to_string(),
+        _ => "chunk.wav".to_string(),
+    }
+}
+
 fn estimate_provider_latency(settings: &AppSettings) -> u32 {
     let base = match settings.ai_provider.as_str() {
         "OpenAI" => 180,
@@ -564,6 +643,11 @@ struct OpenAiChatCompletionRequest {
 #[derive(Debug, Deserialize)]
 struct OpenAiChatCompletionResponse {
     choices: Vec<OpenAiChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiTranscriptionResponse {
+    text: String,
 }
 
 #[derive(Debug, Deserialize)]
