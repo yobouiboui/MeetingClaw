@@ -81,6 +81,21 @@ impl Default for AppSettings {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProviderConfig {
+    pub provider_id: String,
+    pub enabled: bool,
+    pub endpoint: String,
+    pub model: String,
+    pub api_key_hint: String,
+    pub auth_mode: String,
+    pub supports_vision: bool,
+    pub supports_streaming: bool,
+    pub last_checked_at: Option<String>,
+    pub status: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionPerformance {
     pub latency_ms: u32,
     pub transcription_accuracy: u32,
@@ -170,14 +185,48 @@ impl Default for Diagnostics {
 #[serde(rename_all = "camelCase")]
 pub struct AppSnapshot {
     pub settings: AppSettings,
+    pub providers: Vec<ProviderConfig>,
     pub session: SessionState,
     pub history: Vec<MeetingRecord>,
     pub diagnostics: Diagnostics,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotGenerationRequest {
+    pub settings: AppSettings,
+    pub providers: Vec<ProviderConfig>,
+    pub playbooks: Vec<Playbook>,
+    pub transcript: Vec<TranscriptSegment>,
+    pub screen_context: Vec<ScreenInsight>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotGenerationResponse {
+    pub provider_id: String,
+    pub suggestions: Vec<SuggestionCard>,
+    pub live_summary: String,
+    pub notes: String,
+    pub email_draft: String,
+    pub performance: SessionPerformance,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Playbook {
+    pub id: String,
+    pub name: String,
+    pub summary: String,
+    pub instructions: String,
+    pub tags: Vec<String>,
+    pub active: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistedState {
     pub settings: AppSettings,
+    pub providers: Vec<ProviderConfig>,
     pub history: Vec<MeetingRecord>,
 }

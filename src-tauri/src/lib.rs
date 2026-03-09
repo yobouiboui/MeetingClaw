@@ -72,7 +72,10 @@ pub fn run() {
             stop_session,
             toggle_overlay,
             toggle_main_window,
-            update_settings
+            update_settings,
+            update_provider_config,
+            test_provider_connection,
+            generate_copilot_preview
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

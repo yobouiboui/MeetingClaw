@@ -69,6 +69,23 @@ export type ProviderConfig = {
   status: ProviderConnectionStatus
 }
 
+export type CopilotGenerationRequest = {
+  settings: AppSettings
+  providers: ProviderConfig[]
+  playbooks: Playbook[]
+  transcript: TranscriptSegment[]
+  screenContext: ScreenInsight[]
+}
+
+export type CopilotGenerationResponse = {
+  providerId: string
+  suggestions: SuggestionCard[]
+  liveSummary: string
+  notes: string
+  emailDraft: string
+  performance: SessionPerformance
+}
+
 export type SessionPerformance = {
   latencyMs: number
   transcriptionAccuracy: number

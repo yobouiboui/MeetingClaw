@@ -3,9 +3,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    models::{AppSettings, AppSnapshot},
+    models::{AppSettings, AppSnapshot, CopilotGenerationRequest, CopilotGenerationResponse},
     simulator::spawn_session_runtime,
-    state::AppState,
+    state::{AppState, ProviderConfigPatch},
 };
 
 #[tauri::command]
@@ -90,4 +90,35 @@ pub async fn update_settings(
 
     state.emit_snapshot(&app)?;
     Ok(snapshot)
+}
+
+#[tauri::command]
+pub async fn update_provider_config(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    provider_id: String,
+    patch: ProviderConfigPatch,
+) -> Result<AppSnapshot, String> {
+    let snapshot = state.update_provider_config(&provider_id, patch)?;
+    state.emit_snapshot(&app)?;
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub async fn test_provider_connection(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    provider_id: String,
+) -> Result<AppSnapshot, String> {
+    let snapshot = state.test_provider_connection(&provider_id)?;
+    state.emit_snapshot(&app)?;
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub async fn generate_copilot_preview(
+    state: State<'_, Arc<AppState>>,
+    request: CopilotGenerationRequest,
+) -> Result<CopilotGenerationResponse, String> {
+    state.generate_copilot_preview(request)
 }

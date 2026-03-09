@@ -17,10 +17,12 @@ import { TranscriptPanel } from './TranscriptPanel'
 
 export function MainWindow() {
   const [historyQuery, setHistoryQuery] = useState('')
+  const error = useAppStore((state) => state.error)
   const snapshot = useAppStore((state) => state.snapshot)
   const playbooks = useAppStore((state) => state.playbooks)
   const updateProviderConfig = useAppStore((state) => state.updateProviderConfig)
   const testProviderConnection = useAppStore((state) => state.testProviderConnection)
+  const refreshCopilotPreview = useAppStore((state) => state.refreshCopilotPreview)
   const startMeeting = useAppStore((state) => state.startMeeting)
   const stopMeeting = useAppStore((state) => state.stopMeeting)
   const toggleOverlayWindow = useAppStore((state) => state.toggleOverlayWindow)
@@ -119,6 +121,11 @@ export function MainWindow() {
               </div>
             ))}
           </div>
+          {error ? (
+            <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              {error}
+            </div>
+          ) : null}
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr_0.9fr]">
@@ -181,6 +188,7 @@ export function MainWindow() {
             <SessionComposerPanel
               onAddScreenInsight={addScreenInsight}
               onAddTranscript={injectTranscriptLine}
+              onGeneratePreview={() => void refreshCopilotPreview()}
             />
           </div>
         </div>

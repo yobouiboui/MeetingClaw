@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { AppSettings, AppSnapshot } from '../types'
+import type { AppSettings, AppSnapshot, CopilotGenerationRequest, CopilotGenerationResponse, ProviderConfig } from '../types'
 
 export const SNAPSHOT_EVENT = 'meetingclaw://snapshot'
 
@@ -43,6 +43,18 @@ export async function toggleMainWindow() {
 
 export async function updateSettings(settings: AppSettings) {
   return invoke<AppSnapshot>('update_settings', { settings })
+}
+
+export async function updateProviderConfig(providerId: string, patch: Partial<ProviderConfig>) {
+  return invoke<AppSnapshot>('update_provider_config', { providerId, patch })
+}
+
+export async function testProviderConnection(providerId: string) {
+  return invoke<AppSnapshot>('test_provider_connection', { providerId })
+}
+
+export async function generateCopilotPreview(request: CopilotGenerationRequest) {
+  return invoke<CopilotGenerationResponse>('generate_copilot_preview', { request })
 }
 
 export async function listenForSnapshots(handler: (snapshot: AppSnapshot) => void) {

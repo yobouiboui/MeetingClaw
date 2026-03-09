@@ -9,6 +9,11 @@ import {
 import { createDemoSnapshot, demoTranscriptQueue } from '../lib/demo-data'
 import { mergeProviderConfigs, testProviderConfig } from '../lib/providers'
 import {
+  generateRuntimeCopilotPreview,
+  testRuntimeProviderConnection,
+  updateRuntimeProviderConfig,
+} from '../lib/runtime-api'
+import {
   fetchSnapshot,
   isTauriRuntime,
   listenForSnapshots,
@@ -205,6 +210,7 @@ type AppStore = {
   saveSettings: (settings: AppSettings) => Promise<void>
   updateProviderConfig: (providerId: string, patch: Partial<ProviderConfig>) => void
   testProviderConnection: (providerId: string) => void
+  refreshCopilotPreview: () => Promise<void>
   addPlaybook: (playbook: Omit<Playbook, 'id'>) => void
   togglePlaybook: (playbookId: string) => void
   replacePlaybooks: (playbooks: Playbook[]) => void
@@ -420,16 +426,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return
     }
 
-    const nextProviders = snapshot.providers.map((provider) =>
-      provider.providerId === providerId ? { ...provider, ...patch } : provider,
-    )
-
-    const nextSnapshot = {
-      ...snapshot,
-      providers: nextProviders,
-    }
-    persistBrowserSnapshot(nextSnapshot)
-    set({ snapshot: nextSnapshot, error: null })
+    void updateRuntimeProviderConfig(snapshot, providerId, patch)
+      .then((nextSnapshot) => {
+        persistBrowserSnapshot(nextSnapshot)
+        set({ snapshot: hydrateSnapshot(nextSnapshot, get().playbooks), error: null })
+      })
+      .catch((error: unknown) => {
+        const nextSnapshot = {
+          ...snapshot,
+          providers: snapshot.providers.map((provider) =>
+            provider.providerId === providerId ? { ...provider, ...patch } : provider,
+          ),
+        }
+        persistBrowserSnapshot(nextSnapshot)
+        set({ snapshot: nextSnapshot, error: error instanceof Error ? error.message : null })
+      })
   },
   testProviderConnection: (providerId) => {
     const snapshot = get().snapshot
@@ -437,24 +448,64 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return
     }
 
-    const nextProviders = snapshot.providers.map((provider) => {
-      if (provider.providerId !== providerId) {
-        return provider
-      }
+    void testRuntimeProviderConnection(snapshot, providerId)
+      .then((nextSnapshot) => {
+        persistBrowserSnapshot(nextSnapshot)
+        set({ snapshot: hydrateSnapshot(nextSnapshot, get().playbooks), error: null })
+      })
+      .catch((error: unknown) => {
+        const fallbackProviders = snapshot.providers.map((provider) => {
+          if (provider.providerId !== providerId) {
+            return provider
+          }
 
-      return {
-        ...provider,
-        status: testProviderConfig(provider),
-        lastCheckedAt: new Date().toISOString(),
-      }
-    })
+          return {
+            ...provider,
+            status: testProviderConfig(provider),
+            lastCheckedAt: new Date().toISOString(),
+          }
+        })
 
-    const nextSnapshot = {
-      ...snapshot,
-      providers: nextProviders,
+        const nextSnapshot = {
+          ...snapshot,
+          providers: fallbackProviders,
+        }
+        persistBrowserSnapshot(nextSnapshot)
+        set({ snapshot: nextSnapshot, error: error instanceof Error ? error.message : null })
+      })
+  },
+  refreshCopilotPreview: async () => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
     }
-    persistBrowserSnapshot(nextSnapshot)
-    set({ snapshot: nextSnapshot, error: null })
+
+    try {
+      const response = await generateRuntimeCopilotPreview({
+        settings: snapshot.settings,
+        providers: snapshot.providers,
+        playbooks: get().playbooks,
+        transcript: snapshot.session.transcript,
+        screenContext: snapshot.session.screenContext,
+      })
+
+      const nextSnapshot = {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          suggestions: response.suggestions,
+          liveSummary: response.liveSummary,
+          notes: response.notes,
+          emailDraft: response.emailDraft,
+          performance: response.performance,
+        },
+      }
+
+      persistBrowserSnapshot(nextSnapshot)
+      set({ snapshot: nextSnapshot, error: null })
+    } catch (error: unknown) {
+      set({ error: error instanceof Error ? error.message : 'Failed to generate provider preview' })
+    }
   },
   addPlaybook: (playbook) => {
     const nextPlaybooks = [
