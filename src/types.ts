@@ -86,6 +86,17 @@ export type CopilotGenerationResponse = {
   performance: SessionPerformance
 }
 
+export type TranscriptIngestPayload = {
+  speaker: string
+  text: string
+  confidence?: number
+}
+
+export type ScreenInsightPayload = {
+  headline: string
+  detail: string
+}
+
 export type SessionPerformance = {
   latencyMs: number
   transcriptionAccuracy: number

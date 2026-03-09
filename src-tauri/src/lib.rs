@@ -76,7 +76,9 @@ pub fn run() {
             update_settings,
             update_provider_config,
             test_provider_connection,
-            generate_copilot_preview
+            generate_copilot_preview,
+            ingest_transcript_segment,
+            ingest_screen_insight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

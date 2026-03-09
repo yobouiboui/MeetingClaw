@@ -1,6 +1,8 @@
 import {
   fetchSnapshot as fetchTauriSnapshot,
   generateCopilotPreview as generateTauriCopilotPreview,
+  ingestScreenInsight as ingestTauriScreenInsight,
+  ingestTranscriptSegment as ingestTauriTranscriptSegment,
   isTauriRuntime,
   testProviderConnection as testTauriProviderConnection,
   updateProviderConfig as updateTauriProviderConfig,
@@ -12,7 +14,15 @@ import {
   estimateProviderLatency,
 } from './copilot'
 import { mergeProviderConfigs, resolveProviderDescriptor, testProviderConfig } from './providers'
-import type { AppSnapshot, CopilotGenerationRequest, CopilotGenerationResponse, ProviderConfig } from '../types'
+import type {
+  AppSnapshot,
+  CopilotGenerationRequest,
+  CopilotGenerationResponse,
+  Playbook,
+  ProviderConfig,
+  ScreenInsightPayload,
+  TranscriptIngestPayload,
+} from '../types'
 
 export async function fetchRuntimeSnapshot() {
   return fetchTauriSnapshot()
@@ -85,6 +95,59 @@ export async function generateRuntimeCopilotPreview(
       contextPipeline: descriptor.supportsVision
         ? describeContextPipeline(request.settings)
         : 'Screenshot queue -> OCR adapter -> text-only context ranker',
+    },
+  }
+}
+
+export async function ingestRuntimeTranscript(
+  snapshot: AppSnapshot,
+  playbooks: Playbook[],
+  payload: TranscriptIngestPayload,
+) {
+  if (isTauriRuntime()) {
+    return ingestTauriTranscriptSegment(payload, playbooks)
+  }
+
+  return {
+    ...snapshot,
+    session: {
+      ...snapshot.session,
+      transcript: [
+        ...snapshot.session.transcript,
+        {
+          id: crypto.randomUUID(),
+          speaker: payload.speaker,
+          text: payload.text,
+          timestamp: new Date().toISOString(),
+          confidence: payload.confidence ?? 0.99,
+        },
+      ],
+    },
+  }
+}
+
+export async function ingestRuntimeScreenInsight(
+  snapshot: AppSnapshot,
+  playbooks: Playbook[],
+  payload: ScreenInsightPayload,
+) {
+  if (isTauriRuntime()) {
+    return ingestTauriScreenInsight(payload, playbooks)
+  }
+
+  return {
+    ...snapshot,
+    session: {
+      ...snapshot.session,
+      screenContext: [
+        {
+          id: crypto.randomUUID(),
+          headline: payload.headline,
+          detail: payload.detail,
+          capturedAt: new Date().toLocaleTimeString(),
+        },
+        ...snapshot.session.screenContext,
+      ].slice(0, 8),
     },
   }
 }

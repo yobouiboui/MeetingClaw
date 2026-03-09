@@ -1,7 +1,16 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { AppSettings, AppSnapshot, CopilotGenerationRequest, CopilotGenerationResponse, ProviderConfig } from '../types'
+import type {
+  AppSettings,
+  AppSnapshot,
+  CopilotGenerationRequest,
+  CopilotGenerationResponse,
+  Playbook,
+  ProviderConfig,
+  ScreenInsightPayload,
+  TranscriptIngestPayload,
+} from '../types'
 
 export const SNAPSHOT_EVENT = 'meetingclaw://snapshot'
 
@@ -55,6 +64,14 @@ export async function testProviderConnection(providerId: string) {
 
 export async function generateCopilotPreview(request: CopilotGenerationRequest) {
   return invoke<CopilotGenerationResponse>('generate_copilot_preview', { request })
+}
+
+export async function ingestTranscriptSegment(payload: TranscriptIngestPayload, playbooks: Playbook[]) {
+  return invoke<AppSnapshot>('ingest_transcript_segment', { payload, playbooks })
+}
+
+export async function ingestScreenInsight(payload: ScreenInsightPayload, playbooks: Playbook[]) {
+  return invoke<AppSnapshot>('ingest_screen_insight', { payload, playbooks })
 }
 
 export async function listenForSnapshots(handler: (snapshot: AppSnapshot) => void) {

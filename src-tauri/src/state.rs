@@ -435,6 +435,82 @@ impl AppState {
         Ok(())
     }
 
+    pub fn ingest_transcript_segment(&self, segment: TranscriptSegment) -> Result<AppSnapshot, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "state poisoned".to_string())?;
+        if !runtime.session.active {
+            return Err("session is not active".to_string());
+        }
+
+        runtime.session.transcript.push(segment);
+        runtime.session.transcript = runtime
+            .session
+            .transcript
+            .iter()
+            .rev()
+            .take(120)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+
+        Ok(AppSnapshot {
+            settings: runtime.settings.clone(),
+            providers: runtime.providers.clone(),
+            session: runtime.session.clone(),
+            history: runtime.history.clone(),
+            diagnostics: Diagnostics::default(),
+        })
+    }
+
+    pub fn ingest_screen_insight(&self, insight: ScreenInsight) -> Result<AppSnapshot, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "state poisoned".to_string())?;
+        if !runtime.session.active {
+            return Err("session is not active".to_string());
+        }
+
+        runtime.session.screen_context.insert(0, insight);
+        runtime.session.screen_context.truncate(8);
+
+        Ok(AppSnapshot {
+            settings: runtime.settings.clone(),
+            providers: runtime.providers.clone(),
+            session: runtime.session.clone(),
+            history: runtime.history.clone(),
+            diagnostics: Diagnostics::default(),
+        })
+    }
+
+    pub fn apply_copilot_generation(
+        &self,
+        response: CopilotGenerationResponse,
+    ) -> Result<AppSnapshot, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "state poisoned".to_string())?;
+
+        runtime.session.suggestions = response.suggestions;
+        runtime.session.live_summary = response.live_summary;
+        runtime.session.notes = response.notes;
+        runtime.session.email_draft = response.email_draft;
+        runtime.session.performance = response.performance;
+
+        Ok(AppSnapshot {
+            settings: runtime.settings.clone(),
+            providers: runtime.providers.clone(),
+            session: runtime.session.clone(),
+            history: runtime.history.clone(),
+            diagnostics: Diagnostics::default(),
+        })
+    }
+
     pub fn emit_snapshot(&self, app: &AppHandle) -> Result<(), String> {
         let snapshot = self.snapshot();
         app.emit(SNAPSHOT_EVENT, snapshot)

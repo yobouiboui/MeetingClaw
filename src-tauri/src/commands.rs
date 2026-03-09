@@ -3,11 +3,16 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    models::{AppSettings, AppSnapshot, CopilotGenerationRequest, CopilotGenerationResponse},
+    models::{
+        AppSettings, AppSnapshot, CopilotGenerationRequest, CopilotGenerationResponse, Playbook,
+        ScreenInsight, ScreenInsightPayload, TranscriptIngestPayload, TranscriptSegment,
+    },
     provider_http,
     simulator::spawn_session_runtime,
     state::{AppState, ProviderConfigPatch},
 };
+use chrono::Utc;
+use uuid::Uuid;
 
 #[tauri::command]
 pub async fn get_app_snapshot(state: State<'_, Arc<AppState>>) -> Result<AppSnapshot, String> {
@@ -125,5 +130,66 @@ pub async fn generate_copilot_preview(
     match provider_http::generate_copilot_preview(&request).await {
         Ok(response) => Ok(response),
         Err(_) => state.generate_copilot_preview(request),
+    }
+}
+
+#[tauri::command]
+pub async fn ingest_transcript_segment(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    payload: TranscriptIngestPayload,
+    playbooks: Vec<Playbook>,
+) -> Result<AppSnapshot, String> {
+    let segment = TranscriptSegment {
+        id: Uuid::new_v4().to_string(),
+        speaker: payload.speaker,
+        text: payload.text,
+        timestamp: Utc::now().to_rfc3339(),
+        confidence: payload.confidence.unwrap_or(0.98),
+    };
+
+    let snapshot = state.ingest_transcript_segment(segment)?;
+    let request = build_generation_request(&snapshot, playbooks);
+    let response = match provider_http::generate_copilot_preview(&request).await {
+        Ok(response) => response,
+        Err(_) => state.generate_copilot_preview(request)?,
+    };
+    let snapshot = state.apply_copilot_generation(response)?;
+    state.emit_snapshot(&app)?;
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub async fn ingest_screen_insight(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    payload: ScreenInsightPayload,
+    playbooks: Vec<Playbook>,
+) -> Result<AppSnapshot, String> {
+    let insight = ScreenInsight {
+        id: Uuid::new_v4().to_string(),
+        headline: payload.headline,
+        detail: payload.detail,
+        captured_at: Utc::now().format("%H:%M:%S").to_string(),
+    };
+
+    let snapshot = state.ingest_screen_insight(insight)?;
+    let request = build_generation_request(&snapshot, playbooks);
+    let response = match provider_http::generate_copilot_preview(&request).await {
+        Ok(response) => response,
+        Err(_) => state.generate_copilot_preview(request)?,
+    };
+    let snapshot = state.apply_copilot_generation(response)?;
+    state.emit_snapshot(&app)?;
+    Ok(snapshot)
+}
+
+fn build_generation_request(snapshot: &AppSnapshot, playbooks: Vec<Playbook>) -> CopilotGenerationRequest {
+    CopilotGenerationRequest {
+        settings: snapshot.settings.clone(),
+        providers: snapshot.providers.clone(),
+        playbooks,
+        transcript: snapshot.session.transcript.clone(),
+        screen_context: snapshot.session.screen_context.clone(),
     }
 }

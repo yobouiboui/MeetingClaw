@@ -214,6 +214,21 @@ pub struct CopilotGenerationResponse {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TranscriptIngestPayload {
+    pub speaker: String,
+    pub text: String,
+    pub confidence: Option<f32>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenInsightPayload {
+    pub headline: String,
+    pub detail: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Playbook {
     pub id: String,
     pub name: String,

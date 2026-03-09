@@ -10,6 +10,8 @@ import { createDemoSnapshot, demoTranscriptQueue } from '../lib/demo-data'
 import { mergeProviderConfigs, testProviderConfig } from '../lib/providers'
 import {
   generateRuntimeCopilotPreview,
+  ingestRuntimeScreenInsight,
+  ingestRuntimeTranscript,
   testRuntimeProviderConnection,
   updateRuntimeProviderConfig,
 } from '../lib/runtime-api'
@@ -567,6 +569,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return
     }
 
+    if (isTauriRuntime()) {
+      void ingestRuntimeTranscript(snapshot, get().playbooks, { speaker, text, confidence: 0.99 })
+        .then((nextSnapshot) => {
+          set({ snapshot: hydrateSnapshot(nextSnapshot, get().playbooks), error: null })
+        })
+        .catch((error: unknown) => {
+          set({ error: error instanceof Error ? error.message : 'Failed to ingest transcript segment' })
+        })
+      return
+    }
+
     const nextTranscript = [
       ...snapshot.session.transcript,
       {
@@ -590,6 +603,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
   addScreenInsight: (headline, detail) => {
     const snapshot = get().snapshot
     if (!snapshot) {
+      return
+    }
+
+    if (isTauriRuntime()) {
+      void ingestRuntimeScreenInsight(snapshot, get().playbooks, { headline, detail })
+        .then((nextSnapshot) => {
+          set({ snapshot: hydrateSnapshot(nextSnapshot, get().playbooks), error: null })
+        })
+        .catch((error: unknown) => {
+          set({ error: error instanceof Error ? error.message : 'Failed to ingest screen insight' })
+        })
       return
     }
 
