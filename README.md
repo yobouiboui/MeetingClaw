@@ -24,6 +24,16 @@ On this machine:
 
 The documented workaround is in [docs/build-workaround.md](./docs/build-workaround.md).
 
+## Browser demo mode
+
+Even without the native Tauri runtime, the frontend now runs in a browser demo mode with:
+
+- simulated realtime meeting flow
+- prompt composition preview
+- playbooks
+- searchable history
+- markdown export for the current session
+
 ## Run the frontend locally
 
 ```powershell

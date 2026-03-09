@@ -1,5 +1,7 @@
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut'
 import { create } from 'zustand'
+import { buildCopilotDraft } from '../lib/copilot'
+import { createDemoSnapshot, demoTranscriptQueue } from '../lib/demo-data'
 import {
   fetchSnapshot,
   isTauriRuntime,
@@ -10,7 +12,7 @@ import {
   toggleOverlay,
   updateSettings,
 } from '../lib/tauri'
-import type { AppSettings, AppSnapshot, Playbook } from '../types'
+import type { AppSettings, AppSnapshot, Playbook, TranscriptSegment } from '../types'
 
 const PLAYBOOKS_STORAGE_KEY = 'meetingclaw.playbooks'
 
@@ -59,6 +61,76 @@ function persistPlaybooks(playbooks: Playbook[]) {
   }
 
   window.localStorage.setItem(PLAYBOOKS_STORAGE_KEY, JSON.stringify(playbooks))
+}
+
+let demoInterval: number | null = null
+
+function ensureDemoSessionLoop(get: () => AppStore, set: (partial: Partial<AppStore>) => void) {
+  if (demoInterval !== null) {
+    window.clearInterval(demoInterval)
+  }
+
+  let queueIndex = 0
+
+  demoInterval = window.setInterval(() => {
+    const snapshot = get().snapshot
+    if (!snapshot?.session.active) {
+      return
+    }
+
+    const nextLine = demoTranscriptQueue[queueIndex % demoTranscriptQueue.length]
+    queueIndex += 1
+
+    const nextTranscript: TranscriptSegment[] = [
+      ...snapshot.session.transcript,
+      {
+        id: crypto.randomUUID(),
+        speaker: queueIndex % 2 === 0 ? 'You' : 'Prospect',
+        text: nextLine,
+        timestamp: new Date().toISOString(),
+        confidence: 0.97,
+      },
+    ]
+
+    const nextScreenContext = [
+      {
+        id: crypto.randomUUID(),
+        headline: `Context pass ${queueIndex}`,
+        detail: `Detected meeting signal around: ${nextLine}`,
+        capturedAt: new Date().toLocaleTimeString(),
+      },
+      ...snapshot.session.screenContext,
+    ].slice(0, 4)
+
+    const draft = buildCopilotDraft(
+      snapshot.settings,
+      get().playbooks,
+      nextTranscript,
+      nextScreenContext,
+    )
+
+    set({
+      snapshot: {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          transcript: nextTranscript,
+          screenContext: nextScreenContext,
+          suggestions: draft.suggestions,
+          liveSummary: draft.liveSummary,
+          notes: draft.notes,
+          emailDraft: draft.emailDraft,
+        },
+      },
+    })
+  }, 3200)
+}
+
+function stopDemoSessionLoop() {
+  if (demoInterval !== null) {
+    window.clearInterval(demoInterval)
+    demoInterval = null
+  }
 }
 
 type AppStore = {
@@ -125,7 +197,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     if (!isTauriRuntime()) {
-      set({ initialized: true })
+      set({
+        initialized: true,
+        snapshot: createDemoSnapshot(get().playbooks),
+      })
       return
     }
 
@@ -150,21 +225,133 @@ export const useAppStore = create<AppStore>((set, get) => ({
     )
   },
   startMeeting: async () => {
+    if (!isTauriRuntime()) {
+      const snapshot = get().snapshot ?? createDemoSnapshot(get().playbooks)
+      const draft = buildCopilotDraft(
+        snapshot.settings,
+        get().playbooks,
+        snapshot.session.transcript,
+        snapshot.session.screenContext,
+      )
+      set({
+        snapshot: {
+          ...snapshot,
+          session: {
+            ...snapshot.session,
+            active: true,
+            sessionId: crypto.randomUUID(),
+            startedAt: new Date().toISOString(),
+            suggestions: draft.suggestions,
+            liveSummary: draft.liveSummary,
+            notes: draft.notes,
+            emailDraft: draft.emailDraft,
+          },
+        },
+        error: null,
+      })
+      ensureDemoSessionLoop(get, set)
+      return
+    }
+
     const snapshot = await startSession()
     set({ snapshot, error: null })
   },
   stopMeeting: async () => {
+    if (!isTauriRuntime()) {
+      stopDemoSessionLoop()
+      const snapshot = get().snapshot
+      if (!snapshot) {
+        return
+      }
+
+      set({
+        snapshot: {
+          ...snapshot,
+          history: [
+            {
+              id: snapshot.session.sessionId ?? crypto.randomUUID(),
+              title: `Meeting ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+              startedAt: snapshot.session.startedAt ?? new Date().toISOString(),
+              endedAt: new Date().toISOString(),
+              summary: snapshot.session.liveSummary,
+              followUpEmail: snapshot.session.emailDraft,
+              transcriptPreview: snapshot.session.transcript.map((segment) => segment.text).slice(-3).join(' '),
+            },
+            ...snapshot.history,
+          ].slice(0, 12),
+          session: {
+            ...snapshot.session,
+            active: false,
+          },
+        },
+        error: null,
+      })
+      return
+    }
+
     const snapshot = await stopSession()
     set({ snapshot, error: null })
   },
   toggleOverlayWindow: async () => {
+    if (!isTauriRuntime()) {
+      const snapshot = get().snapshot
+      if (!snapshot) {
+        return
+      }
+
+      set({
+        snapshot: {
+          ...snapshot,
+          session: {
+            ...snapshot.session,
+            overlayVisible: !snapshot.session.overlayVisible,
+          },
+        },
+        error: null,
+      })
+      return
+    }
+
     const snapshot = await toggleOverlay()
     set({ snapshot, error: null })
   },
   toggleMain: async () => {
+    if (!isTauriRuntime()) {
+      return
+    }
+
     await toggleMainWindow()
   },
   saveSettings: async (settings) => {
+    if (!isTauriRuntime()) {
+      const snapshot = get().snapshot
+      if (!snapshot) {
+        return
+      }
+
+      const draft = buildCopilotDraft(
+        settings,
+        get().playbooks,
+        snapshot.session.transcript,
+        snapshot.session.screenContext,
+      )
+      set({
+        snapshot: {
+          ...snapshot,
+          settings,
+          session: {
+            ...snapshot.session,
+            suggestions: draft.suggestions,
+            liveSummary: draft.liveSummary,
+            notes: draft.notes,
+            emailDraft: draft.emailDraft,
+          },
+        },
+        error: null,
+      })
+      return
+    }
+
     const snapshot = await updateSettings(settings)
     set({ snapshot, error: null })
   },
@@ -177,7 +364,23 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ...get().playbooks,
     ]
     persistPlaybooks(nextPlaybooks)
-    set({ playbooks: nextPlaybooks })
+    const snapshot = get().snapshot
+    const nextSnapshot =
+      snapshot == null
+        ? snapshot
+        : {
+            ...snapshot,
+            session: {
+              ...snapshot.session,
+              ...buildCopilotDraft(
+                snapshot.settings,
+                nextPlaybooks,
+                snapshot.session.transcript,
+                snapshot.session.screenContext,
+              ),
+            },
+          }
+    set({ playbooks: nextPlaybooks, snapshot: nextSnapshot })
   },
   togglePlaybook: (playbookId) => {
     const nextPlaybooks = get().playbooks.map((playbook) =>
@@ -189,6 +392,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
         : playbook,
     )
     persistPlaybooks(nextPlaybooks)
-    set({ playbooks: nextPlaybooks })
+    const snapshot = get().snapshot
+    const nextSnapshot =
+      snapshot == null
+        ? snapshot
+        : {
+            ...snapshot,
+            session: {
+              ...snapshot.session,
+              ...buildCopilotDraft(
+                snapshot.settings,
+                nextPlaybooks,
+                snapshot.session.transcript,
+                snapshot.session.screenContext,
+              ),
+            },
+          }
+    set({ playbooks: nextPlaybooks, snapshot: nextSnapshot })
   },
 }))

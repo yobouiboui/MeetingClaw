@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Activity, Gauge, Layers3, Mic, MonitorSmartphone, Sparkles } from 'lucide-react'
+import { composeSystemPrompt } from '../lib/copilot'
 import { formatTimestamp } from '../lib/format'
 import { useAppStore } from '../store/app-store'
 import { HistoryPanel } from './HistoryPanel'
@@ -33,6 +34,7 @@ export function MainWindow() {
   }
 
   const { session, settings, history, diagnostics } = snapshot
+  const promptPreview = composeSystemPrompt(settings, playbooks, session.transcript, session.screenContext)
 
   return (
     <main className="grid-bg min-h-screen px-6 py-6 text-slate-100">
@@ -45,6 +47,9 @@ export function MainWindow() {
                   MeetingClaw
                 </span>
                 <StatusBadge active={session.active} />
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                  {diagnostics.runtimeMode}
+                </span>
               </div>
               <div>
                 <h1 className="text-4xl font-semibold tracking-tight text-white">Windows meeting copilot</h1>
@@ -148,16 +153,7 @@ export function MainWindow() {
             <div className="rounded-2xl border border-slate-800/80 bg-slate-950/45 p-4">
               <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Realtime composition</p>
               <pre className="whitespace-pre-wrap text-sm leading-6 text-slate-200">
-                {[
-                  `Meeting mode: ${settings.meetingMode}`,
-                  `Language: ${settings.preferredLanguage}`,
-                  `Provider: ${settings.aiProvider}`,
-                  '',
-                  'Active playbooks:',
-                  ...playbooks
-                    .filter((playbook) => playbook.active)
-                    .map((playbook) => `- ${playbook.name}: ${playbook.instructions}`),
-                ].join('\n')}
+                {promptPreview}
               </pre>
             </div>
           </ShellCard>
