@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Activity, Gauge, Layers3, Mic, MonitorSmartphone, Sparkles } from 'lucide-react'
 import { composeSystemPrompt } from '../lib/copilot'
 import { formatTimestamp } from '../lib/format'
+import { useMicrophoneCapture } from '../hooks/useMicrophoneCapture'
 import { useAppStore } from '../store/app-store'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { HistoryPanel } from './HistoryPanel'
@@ -17,6 +18,7 @@ import { TranscriptPanel } from './TranscriptPanel'
 
 export function MainWindow() {
   const [historyQuery, setHistoryQuery] = useState('')
+  const microphoneCapture = useMicrophoneCapture()
   const error = useAppStore((state) => state.error)
   const snapshot = useAppStore((state) => state.snapshot)
   const playbooks = useAppStore((state) => state.playbooks)
@@ -100,6 +102,14 @@ export function MainWindow() {
               >
                 {session.overlayVisible ? 'Hide overlay' : 'Show overlay'}
               </button>
+              <button
+                className="rounded-2xl border border-slate-700 bg-slate-950/50 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-500"
+                onClick={() =>
+                  void (microphoneCapture.isRecording ? microphoneCapture.stop() : microphoneCapture.start())
+                }
+              >
+                {microphoneCapture.isRecording ? 'Stop mic capture' : 'Start mic capture'}
+              </button>
             </div>
           </div>
           <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -142,6 +152,11 @@ export function MainWindow() {
           {error ? (
             <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
               {error}
+            </div>
+          ) : null}
+          {microphoneCapture.error ? (
+            <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              {microphoneCapture.error}
             </div>
           ) : null}
         </header>
