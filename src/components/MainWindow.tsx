@@ -3,6 +3,7 @@ import { Activity, Gauge, Layers3, Mic, MonitorSmartphone, Sparkles } from 'luci
 import { composeSystemPrompt } from '../lib/copilot'
 import { formatTimestamp } from '../lib/format'
 import { useAppStore } from '../store/app-store'
+import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { NotesPanel } from './NotesPanel'
 import { PlaybooksPanel } from './PlaybooksPanel'
@@ -141,7 +142,10 @@ export function MainWindow() {
             </ShellCard>
             <HistoryPanel history={history} onQueryChange={setHistoryQuery} query={historyQuery} />
           </div>
-          <SettingsPanel onSave={(next) => void saveSettings(next)} settings={settings} />
+          <div className="grid gap-6">
+            <SettingsPanel onSave={(next) => void saveSettings(next)} settings={settings} />
+            <DiagnosticsPanel diagnostics={diagnostics} performance={session.performance} settings={settings} />
+          </div>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">

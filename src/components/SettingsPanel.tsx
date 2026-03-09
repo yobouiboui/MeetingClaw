@@ -1,4 +1,5 @@
-import { describeAudioPipeline, describeContextPipeline, describeProviderRouting, estimateProviderLatency } from '../lib/copilot'
+import { describeAudioPipeline, describeContextPipeline, estimateProviderLatency } from '../lib/copilot'
+import { describeProviderRouting, resolveProviderDescriptor } from '../lib/providers'
 import type { AppSettings } from '../types'
 import { ShellCard } from './ShellCard'
 
@@ -10,6 +11,7 @@ type SettingsPanelProps = {
 export function SettingsPanel({ settings, onSave }: SettingsPanelProps) {
   const providerRouting = describeProviderRouting(settings)
   const latencyEstimate = estimateProviderLatency(settings)
+  const providerDescriptor = resolveProviderDescriptor(settings)
 
   return (
     <ShellCard title="Settings" subtitle="Windows-focused defaults for hotkeys, provider routing and local mode.">
@@ -32,6 +34,12 @@ export function SettingsPanel({ settings, onSave }: SettingsPanelProps) {
             <option value="Ollama">Ollama</option>
           </select>
         </label>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/30 p-4 text-xs text-slate-400">
+          <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-slate-500">Resolved provider contract</p>
+          <p>Model target: {providerDescriptor.defaultModel}</p>
+          <p className="mt-2">Endpoint: {providerDescriptor.endpoint}</p>
+          <p className="mt-2">Auth: {providerDescriptor.authMode}</p>
+        </div>
         <label className="grid gap-2 text-sm">
           <span className="text-slate-300">Meeting mode</span>
           <select

@@ -1,61 +1,10 @@
 import type { AppSettings, AppSnapshot, Playbook, ScreenInsight, SuggestionCard, TranscriptSegment } from '../types'
+import { describeProviderRouting, resolveProviderDescriptor } from './providers'
 
 type CopilotDraft = Pick<
   AppSnapshot['session'],
   'suggestions' | 'liveSummary' | 'notes' | 'emailDraft'
 >
-
-type ProviderProfile = {
-  style: string
-  latencyMs: number
-  audioPipeline: string
-  contextPipeline: string
-}
-
-const providerProfiles: Record<string, ProviderProfile> = {
-  OpenAI: {
-    style: 'Balanced, fast synthesis',
-    latencyMs: 180,
-    audioPipeline: 'Streaming transcript queue via remote low-latency profile',
-    contextPipeline: 'Vision summary and OCR routed through remote context pass',
-  },
-  Claude: {
-    style: 'Reasoned response shaping',
-    latencyMs: 240,
-    audioPipeline: 'Streaming transcript queue via remote high-context profile',
-    contextPipeline: 'Long-context screen synthesis for discussion state',
-  },
-  Gemini: {
-    style: 'Multimodal slide interpretation',
-    latencyMs: 210,
-    audioPipeline: 'Streaming transcript queue via remote multimodal profile',
-    contextPipeline: 'Slide-aware screenshot extraction and summarization',
-  },
-  Ollama: {
-    style: 'Local-first privacy routing',
-    latencyMs: 260,
-    audioPipeline: 'Local transcript queue for privacy-preserving inference',
-    contextPipeline: 'Local screenshot/OCR context synthesis',
-  },
-}
-
-function getProviderProfile(settings: AppSettings) {
-  const profile = providerProfiles[settings.aiProvider] ?? providerProfiles.OpenAI
-  if (!settings.localMode) {
-    return profile
-  }
-
-  return {
-    ...profile,
-    latencyMs: Math.max(profile.latencyMs + 30, 220),
-    audioPipeline: settings.aiProvider === 'Ollama'
-      ? profile.audioPipeline
-      : `Hybrid local transcript queue with ${settings.aiProvider} final routing`,
-    contextPipeline: settings.aiProvider === 'Ollama'
-      ? profile.contextPipeline
-      : `Hybrid local OCR pass with ${settings.aiProvider} context completion`,
-  }
-}
 
 function latestTranscriptLine(transcript: TranscriptSegment[]) {
   return transcript.at(-1)?.text ?? 'No transcript captured yet.'
@@ -77,20 +26,15 @@ function latestScreenInsight(screenContext: ScreenInsight[]) {
 }
 
 export function estimateProviderLatency(settings: AppSettings) {
-  return getProviderProfile(settings).latencyMs
-}
-
-export function describeProviderRouting(settings: AppSettings) {
-  const profile = getProviderProfile(settings)
-  return `${settings.aiProvider} | ${profile.style} | ${settings.localMode ? 'Local-first routing' : 'Cloud routing'}`
+  return resolveProviderDescriptor(settings).latencyMs
 }
 
 export function describeAudioPipeline(settings: AppSettings) {
-  return getProviderProfile(settings).audioPipeline
+  return resolveProviderDescriptor(settings).audioPipeline
 }
 
 export function describeContextPipeline(settings: AppSettings) {
-  return getProviderProfile(settings).contextPipeline
+  return resolveProviderDescriptor(settings).contextPipeline
 }
 
 export function buildCopilotDraft(
