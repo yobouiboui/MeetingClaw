@@ -79,17 +79,12 @@ pub async fn toggle_main_window(
 
 #[tauri::command]
 pub async fn update_settings(
-    app: AppHandle,
+    _app: AppHandle,
     state: State<'_, Arc<AppState>>,
     settings: AppSettings,
 ) -> Result<AppSnapshot, String> {
     let snapshot = state.update_settings(settings)?;
-
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.set_opacity(snapshot.settings.overlay_opacity);
-    }
-
-    state.emit_snapshot(&app)?;
+    state.emit_snapshot(&_app)?;
     Ok(snapshot)
 }
 

@@ -112,23 +112,29 @@ impl AppState {
                 .take(3)
                 .collect::<Vec<_>>()
                 .join(" ");
+            let session_id = runtime
+                .session
+                .session_id
+                .clone()
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
+            let started_at = runtime
+                .session
+                .started_at
+                .clone()
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
+            let summary = runtime.session.live_summary.clone();
+            let follow_up_email = runtime.session.email_draft.clone();
+            let title = format!("Meeting {}", Utc::now().format("%d/%m %H:%M"));
+            let ended_at = Utc::now().to_rfc3339();
             runtime.history.insert(
                 0,
                 MeetingRecord {
-                    id: runtime
-                        .session
-                        .session_id
-                        .clone()
-                        .unwrap_or_else(|| Uuid::new_v4().to_string()),
-                    title: format!("Meeting {}", Utc::now().format("%d/%m %H:%M")),
-                    started_at: runtime
-                        .session
-                        .started_at
-                        .clone()
-                        .unwrap_or_else(|| Utc::now().to_rfc3339()),
-                    ended_at: Utc::now().to_rfc3339(),
-                    summary: runtime.session.live_summary.clone(),
-                    follow_up_email: runtime.session.email_draft.clone(),
+                    id: session_id,
+                    title,
+                    started_at,
+                    ended_at,
+                    summary,
+                    follow_up_email,
                     transcript_preview,
                 },
             );
