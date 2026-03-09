@@ -3,6 +3,7 @@ mod models;
 mod provider_http;
 mod simulator;
 mod state;
+mod storage;
 
 use tauri::{
     image::Image,

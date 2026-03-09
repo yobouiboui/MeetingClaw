@@ -14,6 +14,7 @@ use crate::models::{
     MeetingRecord, PersistedState, ProviderConfig, ScreenInsight, SessionPerformance, SessionState,
     SuggestionCard, TranscriptSegment,
 };
+use crate::storage::HistoryStore;
 
 const SNAPSHOT_EVENT: &str = "meetingclaw://snapshot";
 
@@ -28,6 +29,7 @@ struct RuntimeState {
 
 pub struct AppState {
     runtime: Mutex<RuntimeState>,
+    history_store: HistoryStore,
     storage_path: PathBuf,
 }
 
@@ -39,15 +41,19 @@ impl AppState {
         fs::create_dir_all(&base_dir).map_err(|err| err.to_string())?;
 
         let storage_path = base_dir.join("state.json");
+        let history_db_path = base_dir.join("history.db");
         let persisted = if storage_path.exists() {
             let raw = fs::read_to_string(&storage_path).map_err(|err| err.to_string())?;
             serde_json::from_str::<PersistedState>(&raw).unwrap_or_default()
         } else {
             PersistedState::default()
         };
+        let history_store = HistoryStore::new(&history_db_path)?;
         let providers = merge_provider_configs(&persisted.settings, &persisted.providers);
         let settings = persisted.settings;
-        let history = persisted.history;
+        let history = history_store
+            .load_history(12)
+            .unwrap_or_else(|_| persisted.history);
 
         Ok(Arc::new(Self {
             runtime: Mutex::new(RuntimeState {
@@ -57,6 +63,7 @@ impl AppState {
                 session: SessionState::default(),
                 generation: 0,
             }),
+            history_store,
             storage_path,
         }))
     }
@@ -126,19 +133,17 @@ impl AppState {
             let follow_up_email = runtime.session.email_draft.clone();
             let title = format!("Meeting {}", Utc::now().format("%d/%m %H:%M"));
             let ended_at = Utc::now().to_rfc3339();
-            runtime.history.insert(
-                0,
-                MeetingRecord {
-                    id: session_id,
-                    title,
-                    started_at,
-                    ended_at,
-                    summary,
-                    follow_up_email,
-                    transcript_preview,
-                },
-            );
-            runtime.history.truncate(12);
+            let record = MeetingRecord {
+                id: session_id,
+                title,
+                started_at,
+                ended_at,
+                summary,
+                follow_up_email,
+                transcript_preview,
+            };
+            self.history_store.insert_meeting(&record)?;
+            runtime.history = self.history_store.load_history(12)?;
         }
 
         runtime.generation += 1;
@@ -521,7 +526,7 @@ impl AppState {
         let persisted = PersistedState {
             settings: runtime.settings.clone(),
             providers: runtime.providers.clone(),
-            history: runtime.history.clone(),
+            history: Vec::new(),
         };
         let payload = serialize_pretty(&persisted)?;
         fs::write(&self.storage_path, payload).map_err(|err| err.to_string())
