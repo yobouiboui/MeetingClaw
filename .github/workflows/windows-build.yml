@@ -24,9 +24,15 @@ on:
       - "tsconfig*.json"
       - ".github/workflows/windows-build.yml"
 
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -41,8 +47,27 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Check Rust library
+        working-directory: src-tauri
+        run: cargo check --lib --message-format=short
+
+      - name: Test Rust library
+        working-directory: src-tauri
+        run: cargo test --lib --message-format=short
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

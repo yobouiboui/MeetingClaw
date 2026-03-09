@@ -2,9 +2,10 @@
 name = "meetingclaw"
 version = "0.1.0"
 description = "MeetingClaw Windows meeting copilot"
-authors = ["Codex"]
-license = ""
-repository = ""
+authors = ["MeetingClaw contributors"]
+license = "MIT"
+repository = "https://github.com/yobouiboui/MeetingClaw"
+homepage = "https://github.com/yobouiboui/MeetingClaw"
 edition = "2021"
 rust-version = "1.77.2"
 

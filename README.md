@@ -14,13 +14,24 @@ This repository currently includes:
 - a simulated realtime session pipeline ready to be replaced with real audio, OCR and LLM adapters
 - a GitHub Actions workflow for Windows builds
 
-## Local status
+## Current implementation status
+
+The app now includes:
+
+- continuous microphone capture from the webview with chunked transcription handoff
+- continuous screen capture with OCR extraction and stable-frame throttling
+- provider adapters for `OpenAI`, `Claude`, `Gemini` and `Ollama`
+- local SQLite meeting history persistence
+- browser/demo mode fallback when the Tauri runtime is unavailable
+
+## Local validation
 
 On this machine:
 
 - `npm run build` passes
 - `npm run lint` passes
-- native Cargo/Tauri compilation is blocked by a local Windows execution policy affecting Cargo build scripts
+- `cargo check` passes under `WSL Ubuntu`
+- `cargo test --lib` passes under `WSL Ubuntu`
 
 The documented workaround is in [docs/build-workaround.md](./docs/build-workaround.md).
 
@@ -42,15 +53,23 @@ npm run build
 npm run lint
 ```
 
+Rust validation from WSL:
+
+```powershell
+wsl.exe -d Ubuntu -- sh -lc '. "$HOME/.cargo/env" && cd /mnt/c/Users/Yohan.BOUYSSIERE/Projects/MeetingClaw/src-tauri && cargo check && cargo test --lib'
+```
+
 ## Build on GitHub Actions
 
-1. Create a dedicated GitHub repository for `MeetingClaw`.
-2. Push this project.
-3. Open the `Actions` tab.
-4. Run `Windows Build`.
-5. Download the generated Windows artifacts.
+1. Push the latest `main` branch.
+2. Open the `Actions` tab.
+3. Run `Windows Build` if it did not start automatically.
+4. Wait for frontend lint/build, Rust check/tests and the Tauri bundle steps to pass.
+5. Download the generated `NSIS` installer artifact.
 
 The workflow lives in `.github/workflows/windows-build.yml`.
+
+The Windows packaging notes live in [docs/windows-release.md](./docs/windows-release.md).
 
 ## Project structure
 

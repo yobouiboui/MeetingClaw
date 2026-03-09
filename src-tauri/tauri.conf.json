@@ -28,10 +28,31 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "MeetingClaw",
+    "homepage": "https://github.com/yobouiboui/MeetingClaw",
+    "category": "Productivity",
+    "shortDescription": "Windows desktop meeting copilot with live transcript, OCR and AI suggestions.",
+    "longDescription": "MeetingClaw is a Windows-first desktop meeting copilot built with Tauri, React and Rust. It captures live meeting context from microphone and screen sharing, generates transcript-aware suggestions, maintains notes and follow-up drafts, and stores meeting history locally.",
+    "copyright": "Copyright 2026 MeetingClaw contributors",
+    "license": "MIT",
     "targets": "nsis",
+    "useLocalToolsDir": true,
     "windows": {
+      "allowDowngrades": false,
       "webviewInstallMode": {
-        "type": "downloadBootstrapper"
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "French"
+        ],
+        "compression": "lzma",
+        "displayLanguageSelector": false,
+        "startMenuFolder": "MeetingClaw",
+        "minimumWebview2Version": "120.0.0.0"
       }
     },
     "icon": [
