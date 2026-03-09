@@ -5,17 +5,20 @@ type SessionComposerPanelProps = {
   onAddTranscript: (speaker: string, text: string) => void
   onAddScreenInsight: (headline: string, detail: string) => void
   onGeneratePreview: () => void
+  onTranscribeAudio: (file: File, speaker: string) => void
 }
 
 export function SessionComposerPanel({
   onAddTranscript,
   onAddScreenInsight,
   onGeneratePreview,
+  onTranscribeAudio,
 }: SessionComposerPanelProps) {
   const [speaker, setSpeaker] = useState('You')
   const [transcriptLine, setTranscriptLine] = useState('')
   const [headline, setHeadline] = useState('')
   const [detail, setDetail] = useState('')
+  const [audioFileName, setAudioFileName] = useState('')
 
   return (
     <ShellCard
@@ -36,6 +39,28 @@ export function SessionComposerPanel({
           >
             Generate provider preview
           </button>
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Audio transcription test</p>
+          <p className="text-sm leading-6 text-slate-300">
+            Upload a short audio chunk to exercise the backend transcription command and inject the result into the session.
+          </p>
+          <input
+            accept="audio/*"
+            className="rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 file:mr-3 file:rounded-full file:border-0 file:bg-cyan-400 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-950"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (!file) {
+                return
+              }
+              setAudioFileName(file.name)
+              onTranscribeAudio(file, speaker)
+              event.target.value = ''
+            }}
+            type="file"
+          />
+          <p className="text-xs text-slate-500">{audioFileName || 'No audio file submitted yet.'}</p>
         </div>
 
         <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">

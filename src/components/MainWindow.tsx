@@ -31,6 +31,7 @@ export function MainWindow() {
   const togglePlaybook = useAppStore((state) => state.togglePlaybook)
   const replacePlaybooks = useAppStore((state) => state.replacePlaybooks)
   const injectTranscriptLine = useAppStore((state) => state.injectTranscriptLine)
+  const transcribeAudioFile = useAppStore((state) => state.transcribeAudioFile)
   const addScreenInsight = useAppStore((state) => state.addScreenInsight)
 
   if (!snapshot) {
@@ -45,6 +46,23 @@ export function MainWindow() {
 
   const { session, settings, history, diagnostics, providers } = snapshot
   const promptPreview = composeSystemPrompt(settings, playbooks, session.transcript, session.screenContext)
+
+  const handleAudioFile = async (file: File, speaker: string) => {
+    const buffer = await file.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    let binary = ''
+
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte)
+    }
+
+    await transcribeAudioFile({
+      audioBase64: btoa(binary),
+      mimeType: file.type || 'audio/wav',
+      fileName: file.name,
+      speakerHint: speaker,
+    })
+  }
 
   return (
     <main className="grid-bg min-h-screen px-6 py-6 text-slate-100">
@@ -189,6 +207,7 @@ export function MainWindow() {
               onAddScreenInsight={addScreenInsight}
               onAddTranscript={injectTranscriptLine}
               onGeneratePreview={() => void refreshCopilotPreview()}
+              onTranscribeAudio={(file, speaker) => void handleAudioFile(file, speaker)}
             />
           </div>
         </div>

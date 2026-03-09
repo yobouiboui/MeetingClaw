@@ -12,6 +12,7 @@ import {
   generateRuntimeCopilotPreview,
   ingestRuntimeScreenInsight,
   ingestRuntimeTranscript,
+  transcribeRuntimeAudio,
   testRuntimeProviderConnection,
   updateRuntimeProviderConfig,
 } from '../lib/runtime-api'
@@ -25,7 +26,7 @@ import {
   toggleOverlay,
   updateSettings,
 } from '../lib/tauri'
-import type { AppSettings, AppSnapshot, Playbook, ProviderConfig, TranscriptSegment } from '../types'
+import type { AppSettings, AppSnapshot, AudioChunkPayload, Playbook, ProviderConfig, TranscriptSegment } from '../types'
 
 const PLAYBOOKS_STORAGE_KEY = 'meetingclaw.playbooks'
 const BROWSER_SNAPSHOT_STORAGE_KEY = 'meetingclaw.browserSnapshot'
@@ -217,6 +218,7 @@ type AppStore = {
   togglePlaybook: (playbookId: string) => void
   replacePlaybooks: (playbooks: Playbook[]) => void
   injectTranscriptLine: (speaker: string, text: string) => void
+  transcribeAudioFile: (payload: AudioChunkPayload) => Promise<void>
   addScreenInsight: (headline: string, detail: string) => void
 }
 
@@ -599,6 +601,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
     persistBrowserSnapshot(nextSnapshot)
     set({ snapshot: nextSnapshot })
+  },
+  transcribeAudioFile: async (payload) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    try {
+      const nextSnapshot = await transcribeRuntimeAudio(snapshot, get().playbooks, payload)
+      const hydratedSnapshot = hydrateSnapshot(nextSnapshot, get().playbooks)
+      persistBrowserSnapshot(hydratedSnapshot)
+      set({ snapshot: hydratedSnapshot, error: null })
+    } catch (error: unknown) {
+      set({ error: error instanceof Error ? error.message : 'Failed to transcribe audio file' })
+    }
   },
   addScreenInsight: (headline, detail) => {
     const snapshot = get().snapshot
