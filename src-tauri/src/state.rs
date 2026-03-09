@@ -516,6 +516,10 @@ impl AppState {
         })
     }
 
+    pub fn search_history(&self, query: &str, limit: usize) -> Result<Vec<MeetingRecord>, String> {
+        self.history_store.search_history(query, limit)
+    }
+
     pub fn emit_snapshot(&self, app: &AppHandle) -> Result<(), String> {
         let snapshot = self.snapshot();
         app.emit(SNAPSHOT_EVENT, snapshot)

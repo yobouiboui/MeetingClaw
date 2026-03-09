@@ -12,6 +12,7 @@ import {
   generateRuntimeCopilotPreview,
   ingestRuntimeScreenInsight,
   ingestRuntimeTranscript,
+  searchRuntimeHistory,
   transcribeRuntimeAudio,
   testRuntimeProviderConnection,
   updateRuntimeProviderConfig,
@@ -26,7 +27,15 @@ import {
   toggleOverlay,
   updateSettings,
 } from '../lib/tauri'
-import type { AppSettings, AppSnapshot, AudioChunkPayload, Playbook, ProviderConfig, TranscriptSegment } from '../types'
+import type {
+  AppSettings,
+  AppSnapshot,
+  AudioChunkPayload,
+  MeetingRecord,
+  Playbook,
+  ProviderConfig,
+  TranscriptSegment,
+} from '../types'
 
 const PLAYBOOKS_STORAGE_KEY = 'meetingclaw.playbooks'
 const BROWSER_SNAPSHOT_STORAGE_KEY = 'meetingclaw.browserSnapshot'
@@ -202,6 +211,7 @@ function applyDraftToSession(
 
 type AppStore = {
   snapshot: AppSnapshot | null
+  historySearchResults: MeetingRecord[] | null
   playbooks: Playbook[]
   initialized: boolean
   error: string | null
@@ -217,6 +227,7 @@ type AppStore = {
   addPlaybook: (playbook: Omit<Playbook, 'id'>) => void
   togglePlaybook: (playbookId: string) => void
   replacePlaybooks: (playbooks: Playbook[]) => void
+  searchHistory: (query: string) => Promise<void>
   injectTranscriptLine: (speaker: string, text: string) => void
   transcribeAudioFile: (payload: AudioChunkPayload) => Promise<void>
   addScreenInsight: (headline: string, detail: string) => void
@@ -262,6 +273,7 @@ async function registerShortcuts(snapshot: AppSnapshot, store: AppStore) {
 
 export const useAppStore = create<AppStore>((set, get) => ({
   snapshot: null,
+  historySearchResults: null,
   playbooks: loadPlaybooks(),
   initialized: false,
   error: null,
@@ -359,6 +371,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
       persistBrowserSnapshot(nextSnapshot)
       set({
+        historySearchResults: null,
         snapshot: nextSnapshot,
         error: null,
       })
@@ -564,6 +577,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
           }
     persistBrowserSnapshot(nextSnapshot)
     set({ playbooks, snapshot: nextSnapshot })
+  },
+  searchHistory: async (query) => {
+    const snapshot = get().snapshot
+    if (!snapshot) {
+      return
+    }
+
+    try {
+      const results = await searchRuntimeHistory(snapshot, query)
+      set({
+        historySearchResults: query.trim() ? results : null,
+        error: null,
+      })
+    } catch (error: unknown) {
+      set({
+        historySearchResults: null,
+        error: error instanceof Error ? error.message : 'Failed to search meeting history',
+      })
+    }
   },
   injectTranscriptLine: (speaker, text) => {
     const snapshot = get().snapshot

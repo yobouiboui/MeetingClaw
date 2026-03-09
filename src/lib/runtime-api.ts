@@ -4,6 +4,7 @@ import {
   ingestScreenInsight as ingestTauriScreenInsight,
   ingestTranscriptSegment as ingestTauriTranscriptSegment,
   isTauriRuntime,
+  searchHistory as searchTauriHistory,
   testProviderConnection as testTauriProviderConnection,
   transcribeAudioChunk as transcribeTauriAudioChunk,
   updateProviderConfig as updateTauriProviderConfig,
@@ -20,6 +21,7 @@ import type {
   AudioChunkPayload,
   CopilotGenerationRequest,
   CopilotGenerationResponse,
+  MeetingRecord,
   Playbook,
   ProviderConfig,
   ScreenInsightPayload,
@@ -28,6 +30,27 @@ import type {
 
 export async function fetchRuntimeSnapshot() {
   return fetchTauriSnapshot()
+}
+
+export async function searchRuntimeHistory(
+  snapshot: AppSnapshot,
+  query: string,
+): Promise<MeetingRecord[]> {
+  if (isTauriRuntime()) {
+    return searchTauriHistory(query)
+  }
+
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
+    return snapshot.history
+  }
+
+  return snapshot.history.filter((meeting) =>
+    [meeting.title, meeting.summary, meeting.transcriptPreview, meeting.followUpEmail]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery),
+  )
 }
 
 export async function updateRuntimeProviderConfig(

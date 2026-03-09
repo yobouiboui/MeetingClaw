@@ -7,6 +7,7 @@ import type {
   AudioChunkPayload,
   CopilotGenerationRequest,
   CopilotGenerationResponse,
+  MeetingRecord,
   Playbook,
   ProviderConfig,
   ScreenInsightPayload,
@@ -33,6 +34,10 @@ export async function fetchSnapshot() {
   }
 
   return invoke<AppSnapshot>('get_app_snapshot')
+}
+
+export async function searchHistory(query: string) {
+  return invoke<MeetingRecord[]>('search_history', { query })
 }
 
 export async function startSession() {

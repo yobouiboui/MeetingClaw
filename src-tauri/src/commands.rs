@@ -21,6 +21,14 @@ pub async fn get_app_snapshot(state: State<'_, Arc<AppState>>) -> Result<AppSnap
 }
 
 #[tauri::command]
+pub async fn search_history(
+    state: State<'_, Arc<AppState>>,
+    query: String,
+) -> Result<Vec<crate::models::MeetingRecord>, String> {
+    state.search_history(&query, 24)
+}
+
+#[tauri::command]
 pub async fn start_session(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,

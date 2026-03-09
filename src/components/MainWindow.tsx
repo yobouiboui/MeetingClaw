@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useDeferredValue, useEffect, useState } from 'react'
 import { Activity, Gauge, Layers3, Mic, MonitorSmartphone, Sparkles } from 'lucide-react'
 import { composeSystemPrompt } from '../lib/copilot'
 import { formatTimestamp } from '../lib/format'
@@ -19,8 +19,10 @@ import { TranscriptPanel } from './TranscriptPanel'
 
 export function MainWindow() {
   const [historyQuery, setHistoryQuery] = useState('')
+  const deferredHistoryQuery = useDeferredValue(historyQuery)
   const error = useAppStore((state) => state.error)
   const snapshot = useAppStore((state) => state.snapshot)
+  const historySearchResults = useAppStore((state) => state.historySearchResults)
   const playbooks = useAppStore((state) => state.playbooks)
   const updateProviderConfig = useAppStore((state) => state.updateProviderConfig)
   const testProviderConnection = useAppStore((state) => state.testProviderConnection)
@@ -32,6 +34,7 @@ export function MainWindow() {
   const addPlaybook = useAppStore((state) => state.addPlaybook)
   const togglePlaybook = useAppStore((state) => state.togglePlaybook)
   const replacePlaybooks = useAppStore((state) => state.replacePlaybooks)
+  const searchHistory = useAppStore((state) => state.searchHistory)
   const injectTranscriptLine = useAppStore((state) => state.injectTranscriptLine)
   const transcribeAudioFile = useAppStore((state) => state.transcribeAudioFile)
   const addScreenInsight = useAppStore((state) => state.addScreenInsight)
@@ -41,6 +44,10 @@ export function MainWindow() {
     active: sessionActive,
     onInsight: addScreenInsight,
   })
+
+  useEffect(() => {
+    void searchHistory(deferredHistoryQuery)
+  }, [deferredHistoryQuery, searchHistory])
 
   if (!snapshot) {
     return (
@@ -53,6 +60,7 @@ export function MainWindow() {
   }
 
   const { session, settings, history, diagnostics, providers } = snapshot
+  const displayedHistory = historySearchResults ?? history
   const promptPreview = composeSystemPrompt(settings, playbooks, session.transcript, session.screenContext)
 
   const handleAudioFile = async (file: File, speaker: string) => {
@@ -200,7 +208,7 @@ export function MainWindow() {
                 ))}
               </div>
             </ShellCard>
-            <HistoryPanel history={history} onQueryChange={setHistoryQuery} query={historyQuery} />
+            <HistoryPanel history={displayedHistory} onQueryChange={setHistoryQuery} query={historyQuery} />
           </div>
           <div className="grid gap-6">
             <SettingsPanel onSave={(next) => void saveSettings(next)} settings={settings} />

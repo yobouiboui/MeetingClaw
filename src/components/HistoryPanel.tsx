@@ -11,19 +11,7 @@ type HistoryPanelProps = {
 
 export function HistoryPanel({ history, query, onQueryChange }: HistoryPanelProps) {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
-  const normalizedQuery = query.trim().toLowerCase()
-  const filteredHistory = history.filter((meeting) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [meeting.title, meeting.summary, meeting.transcriptPreview, meeting.followUpEmail]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
-  const selectedMeeting =
-    filteredHistory.find((meeting) => meeting.id === selectedMeetingId) ?? filteredHistory[0] ?? null
+  const selectedMeeting = history.find((meeting) => meeting.id === selectedMeetingId) ?? history[0] ?? null
 
   return (
     <ShellCard title="Meeting history" subtitle="Persistent session archive for recap, replay and future semantic search.">
@@ -34,12 +22,12 @@ export function HistoryPanel({ history, query, onQueryChange }: HistoryPanelProp
         value={query}
       />
       <div className="scrollbar-thin flex max-h-[20rem] flex-col gap-3 overflow-auto pr-2">
-        {filteredHistory.length === 0 ? (
+        {history.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-700/80 p-4 text-sm text-slate-400">
-            {history.length === 0 ? 'No meetings saved yet.' : 'No result for this query.'}
+            {query.trim() ? 'No result for this query.' : 'No meetings saved yet.'}
           </div>
         ) : null}
-        {filteredHistory.map((meeting) => (
+        {history.map((meeting) => (
           <article
             key={meeting.id}
             className={`rounded-2xl border p-4 transition ${

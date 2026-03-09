@@ -70,6 +70,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_snapshot,
+            search_history,
             start_session,
             stop_session,
             toggle_overlay,

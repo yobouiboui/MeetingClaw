@@ -70,6 +70,49 @@ impl HistoryStore {
         Ok(())
     }
 
+    pub fn search_history(&self, query: &str, limit: usize) -> Result<Vec<MeetingRecord>, String> {
+        let normalized_query = query.trim();
+        if normalized_query.is_empty() {
+            return self.load_history(limit);
+        }
+
+        let connection = self.connect()?;
+        let like_query = format!("%{}%", normalized_query.to_lowercase());
+        let mut statement = connection
+            .prepare(
+                "SELECT id, title, started_at, ended_at, summary, follow_up_email, transcript_preview
+                 FROM meeting_history
+                 WHERE lower(title) LIKE ?1
+                    OR lower(summary) LIKE ?1
+                    OR lower(follow_up_email) LIKE ?1
+                    OR lower(transcript_preview) LIKE ?1
+                 ORDER BY ended_at DESC
+                 LIMIT ?2",
+            )
+            .map_err(|err| err.to_string())?;
+
+        let rows = statement
+            .query_map(params![like_query, limit as i64], |row| {
+                Ok(MeetingRecord {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    started_at: row.get(2)?,
+                    ended_at: row.get(3)?,
+                    summary: row.get(4)?,
+                    follow_up_email: row.get(5)?,
+                    transcript_preview: row.get(6)?,
+                })
+            })
+            .map_err(|err| err.to_string())?;
+
+        let mut history = Vec::new();
+        for row in rows {
+            history.push(row.map_err(|err| err.to_string())?);
+        }
+
+        Ok(history)
+    }
+
     fn initialize(&self) -> Result<(), String> {
         let connection = self.connect()?;
         connection
