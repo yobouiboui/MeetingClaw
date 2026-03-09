@@ -1,3 +1,4 @@
+import { describeAudioPipeline, describeContextPipeline, describeProviderRouting, estimateProviderLatency } from '../lib/copilot'
 import type { AppSettings } from '../types'
 import { ShellCard } from './ShellCard'
 
@@ -7,6 +8,9 @@ type SettingsPanelProps = {
 }
 
 export function SettingsPanel({ settings, onSave }: SettingsPanelProps) {
+  const providerRouting = describeProviderRouting(settings)
+  const latencyEstimate = estimateProviderLatency(settings)
+
   return (
     <ShellCard title="Settings" subtitle="Windows-focused defaults for hotkeys, provider routing and local mode.">
       <div className="grid gap-4">
@@ -79,6 +83,13 @@ export function SettingsPanel({ settings, onSave }: SettingsPanelProps) {
           <p>{settings.hotkeys.toggleSession}: start or stop a meeting</p>
           <p>{settings.hotkeys.toggleOverlay}: show or hide the overlay</p>
           <p>{settings.hotkeys.toggleMainWindow}: restore or hide the main window</p>
+        </div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/30 p-4 text-xs text-slate-400">
+          <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-slate-500">Provider routing</p>
+          <p>{providerRouting}</p>
+          <p className="mt-2">Estimated latency: {latencyEstimate} ms</p>
+          <p className="mt-2">Audio pipeline: {describeAudioPipeline(settings)}</p>
+          <p className="mt-2">Context pipeline: {describeContextPipeline(settings)}</p>
         </div>
       </div>
     </ShellCard>

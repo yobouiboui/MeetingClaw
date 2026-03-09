@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Playbook } from '../types'
 import { ShellCard } from './ShellCard'
 
@@ -6,13 +6,15 @@ type PlaybooksPanelProps = {
   playbooks: Playbook[]
   onToggle: (playbookId: string) => void
   onCreate: (playbook: Omit<Playbook, 'id'>) => void
+  onReplace: (playbooks: Playbook[]) => void
 }
 
-export function PlaybooksPanel({ playbooks, onToggle, onCreate }: PlaybooksPanelProps) {
+export function PlaybooksPanel({ playbooks, onToggle, onCreate, onReplace }: PlaybooksPanelProps) {
   const [name, setName] = useState('')
   const [summary, setSummary] = useState('')
   const [instructions, setInstructions] = useState('')
   const [tags, setTags] = useState('')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const activePlaybooks = playbooks.filter((playbook) => playbook.active)
   const promptPreview = activePlaybooks
@@ -44,9 +46,76 @@ export function PlaybooksPanel({ playbooks, onToggle, onCreate }: PlaybooksPanel
     setTags('')
   }
 
+  const exportPlaybooks = () => {
+    const blob = new Blob([JSON.stringify(playbooks, null, 2)], {
+      type: 'application/json',
+    })
+    const href = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = href
+    link.download = `meetingclaw-playbooks-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(href)
+  }
+
+  const importPlaybooks = async (file: File | null) => {
+    if (!file) {
+      return
+    }
+
+    const raw = await file.text()
+
+    try {
+      const parsed = JSON.parse(raw) as Playbook[]
+      const sanitized = parsed
+        .filter((playbook) => playbook.name?.trim() && playbook.instructions?.trim())
+        .map((playbook) => ({
+          id: playbook.id?.trim() || `playbook-${crypto.randomUUID()}`,
+          name: playbook.name.trim(),
+          summary: playbook.summary?.trim() || 'Imported playbook',
+          instructions: playbook.instructions.trim(),
+          tags: Array.isArray(playbook.tags) ? playbook.tags.filter(Boolean) : [],
+          active: playbook.active ?? true,
+        }))
+
+      if (sanitized.length > 0) {
+        onReplace(sanitized)
+      }
+    } catch {
+      return
+    } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+    }
+  }
+
   return (
     <div className="grid gap-6">
       <ShellCard title="Playbooks" subtitle="Custom instructions that shape live answers, summaries and objection handling.">
+        <div className="mb-4 flex flex-wrap gap-3">
+          <button
+            className="rounded-2xl border border-slate-700 bg-slate-950/50 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500"
+            onClick={exportPlaybooks}
+            type="button"
+          >
+            Export JSON
+          </button>
+          <button
+            className="rounded-2xl border border-slate-700 bg-slate-950/50 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
+            Import JSON
+          </button>
+          <input
+            accept="application/json"
+            className="hidden"
+            onChange={(event) => void importPlaybooks(event.target.files?.[0] ?? null)}
+            ref={fileInputRef}
+            type="file"
+          />
+        </div>
         <div className="mb-4 grid gap-3">
           {playbooks.map((playbook) => (
             <article key={playbook.id} className="rounded-2xl border border-slate-800/80 bg-slate-950/45 p-4">

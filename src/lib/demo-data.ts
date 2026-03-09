@@ -1,4 +1,4 @@
-import { buildCopilotDraft } from './copilot'
+import { buildCopilotDraft, describeAudioPipeline, describeContextPipeline, estimateProviderLatency } from './copilot'
 import type { AppSnapshot, AppSettings, Playbook, ScreenInsight, TranscriptSegment } from '../types'
 
 const defaultSettings: AppSettings = {
@@ -58,10 +58,10 @@ export function createDemoSnapshot(playbooks: Playbook[]): AppSnapshot {
       notes: draft.notes,
       emailDraft: draft.emailDraft,
       performance: {
-        latencyMs: 220,
+        latencyMs: estimateProviderLatency(defaultSettings),
         transcriptionAccuracy: 95,
-        audioPipeline: 'Browser demo transcript simulator',
-        contextPipeline: 'Browser demo screen context simulator',
+        audioPipeline: describeAudioPipeline(defaultSettings),
+        contextPipeline: describeContextPipeline(defaultSettings),
       },
     },
     history: [

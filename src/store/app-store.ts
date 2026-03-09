@@ -1,6 +1,11 @@
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut'
 import { create } from 'zustand'
-import { buildCopilotDraft } from '../lib/copilot'
+import {
+  buildCopilotDraft,
+  describeAudioPipeline,
+  describeContextPipeline,
+  estimateProviderLatency,
+} from '../lib/copilot'
 import { createDemoSnapshot, demoTranscriptQueue } from '../lib/demo-data'
 import {
   fetchSnapshot,
@@ -15,6 +20,7 @@ import {
 import type { AppSettings, AppSnapshot, Playbook, TranscriptSegment } from '../types'
 
 const PLAYBOOKS_STORAGE_KEY = 'meetingclaw.playbooks'
+const BROWSER_SNAPSHOT_STORAGE_KEY = 'meetingclaw.browserSnapshot'
 
 const defaultPlaybooks: Playbook[] = [
   {
@@ -63,6 +69,31 @@ function persistPlaybooks(playbooks: Playbook[]) {
   window.localStorage.setItem(PLAYBOOKS_STORAGE_KEY, JSON.stringify(playbooks))
 }
 
+function loadBrowserSnapshot(playbooks: Playbook[]) {
+  if (typeof window === 'undefined') {
+    return createDemoSnapshot(playbooks)
+  }
+
+  const raw = window.localStorage.getItem(BROWSER_SNAPSHOT_STORAGE_KEY)
+  if (!raw) {
+    return createDemoSnapshot(playbooks)
+  }
+
+  try {
+    return JSON.parse(raw) as AppSnapshot
+  } catch {
+    return createDemoSnapshot(playbooks)
+  }
+}
+
+function persistBrowserSnapshot(snapshot: AppSnapshot | null) {
+  if (typeof window === 'undefined' || snapshot == null) {
+    return
+  }
+
+  window.localStorage.setItem(BROWSER_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot))
+}
+
 let demoInterval: number | null = null
 
 function ensureDemoSessionLoop(get: () => AppStore, set: (partial: Partial<AppStore>) => void) {
@@ -102,27 +133,16 @@ function ensureDemoSessionLoop(get: () => AppStore, set: (partial: Partial<AppSt
       ...snapshot.session.screenContext,
     ].slice(0, 4)
 
-    const draft = buildCopilotDraft(
-      snapshot.settings,
-      get().playbooks,
-      nextTranscript,
-      nextScreenContext,
-    )
+    const nextSnapshot = {
+      ...snapshot,
+      session: applyDraftToSession(snapshot, get().playbooks, {
+        transcript: nextTranscript,
+        screenContext: nextScreenContext,
+      }),
+    }
 
-    set({
-      snapshot: {
-        ...snapshot,
-        session: {
-          ...snapshot.session,
-          transcript: nextTranscript,
-          screenContext: nextScreenContext,
-          suggestions: draft.suggestions,
-          liveSummary: draft.liveSummary,
-          notes: draft.notes,
-          emailDraft: draft.emailDraft,
-        },
-      },
-    })
+    persistBrowserSnapshot(nextSnapshot)
+    set({ snapshot: nextSnapshot })
   }, 3200)
 }
 
@@ -130,6 +150,32 @@ function stopDemoSessionLoop() {
   if (demoInterval !== null) {
     window.clearInterval(demoInterval)
     demoInterval = null
+  }
+}
+
+function applyDraftToSession(
+  snapshot: AppSnapshot,
+  playbooks: Playbook[],
+  sessionPatch: Partial<AppSnapshot['session']> = {},
+) {
+  const nextTranscript = sessionPatch.transcript ?? snapshot.session.transcript
+  const nextScreenContext = sessionPatch.screenContext ?? snapshot.session.screenContext
+  const nextSettings = snapshot.settings
+  const draft = buildCopilotDraft(nextSettings, playbooks, nextTranscript, nextScreenContext)
+
+  return {
+    ...snapshot.session,
+    ...sessionPatch,
+    suggestions: draft.suggestions,
+    liveSummary: draft.liveSummary,
+    notes: draft.notes,
+    emailDraft: draft.emailDraft,
+    performance: {
+      ...snapshot.session.performance,
+      latencyMs: estimateProviderLatency(nextSettings),
+      audioPipeline: describeAudioPipeline(nextSettings),
+      contextPipeline: describeContextPipeline(nextSettings),
+    },
   }
 }
 
@@ -146,6 +192,7 @@ type AppStore = {
   saveSettings: (settings: AppSettings) => Promise<void>
   addPlaybook: (playbook: Omit<Playbook, 'id'>) => void
   togglePlaybook: (playbookId: string) => void
+  replacePlaybooks: (playbooks: Playbook[]) => void
   injectTranscriptLine: (speaker: string, text: string) => void
   addScreenInsight: (headline: string, detail: string) => void
 }
@@ -199,9 +246,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     if (!isTauriRuntime()) {
+      const snapshot = loadBrowserSnapshot(get().playbooks)
       set({
         initialized: true,
-        snapshot: createDemoSnapshot(get().playbooks),
+        snapshot,
       })
       return
     }
@@ -229,28 +277,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
   startMeeting: async () => {
     if (!isTauriRuntime()) {
       const snapshot = get().snapshot ?? createDemoSnapshot(get().playbooks)
-      const draft = buildCopilotDraft(
-        snapshot.settings,
-        get().playbooks,
-        snapshot.session.transcript,
-        snapshot.session.screenContext,
-      )
+      const nextSnapshot = {
+        ...snapshot,
+        session: applyDraftToSession(snapshot, get().playbooks, {
+          active: true,
+          sessionId: crypto.randomUUID(),
+          startedAt: new Date().toISOString(),
+        }),
+      }
       set({
-        snapshot: {
-          ...snapshot,
-          session: {
-            ...snapshot.session,
-            active: true,
-            sessionId: crypto.randomUUID(),
-            startedAt: new Date().toISOString(),
-            suggestions: draft.suggestions,
-            liveSummary: draft.liveSummary,
-            notes: draft.notes,
-            emailDraft: draft.emailDraft,
-          },
-        },
+        snapshot: nextSnapshot,
         error: null,
       })
+      persistBrowserSnapshot(nextSnapshot)
       ensureDemoSessionLoop(get, set)
       return
     }
@@ -266,26 +305,34 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return
       }
 
-      set({
-        snapshot: {
-          ...snapshot,
-          history: [
-            {
-              id: snapshot.session.sessionId ?? crypto.randomUUID(),
-              title: `Meeting ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-              startedAt: snapshot.session.startedAt ?? new Date().toISOString(),
-              endedAt: new Date().toISOString(),
-              summary: snapshot.session.liveSummary,
-              followUpEmail: snapshot.session.emailDraft,
-              transcriptPreview: snapshot.session.transcript.map((segment) => segment.text).slice(-3).join(' '),
-            },
-            ...snapshot.history,
-          ].slice(0, 12),
-          session: {
-            ...snapshot.session,
-            active: false,
+      const nextSnapshot = {
+        ...snapshot,
+        history: [
+          {
+            id: snapshot.session.sessionId ?? crypto.randomUUID(),
+            title: `Meeting ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+            startedAt: snapshot.session.startedAt ?? new Date().toISOString(),
+            endedAt: new Date().toISOString(),
+            summary: snapshot.session.liveSummary,
+            followUpEmail: snapshot.session.emailDraft,
+            transcriptPreview: snapshot.session.transcript.map((segment) => segment.text).slice(-3).join(' '),
+          },
+          ...snapshot.history,
+        ].slice(0, 12),
+        session: {
+          ...snapshot.session,
+          active: false,
+          performance: {
+            ...snapshot.session.performance,
+            latencyMs: estimateProviderLatency(snapshot.settings),
+            audioPipeline: describeAudioPipeline(snapshot.settings),
+            contextPipeline: describeContextPipeline(snapshot.settings),
           },
         },
+      }
+      persistBrowserSnapshot(nextSnapshot)
+      set({
+        snapshot: nextSnapshot,
         error: null,
       })
       return
@@ -301,14 +348,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return
       }
 
-      set({
-        snapshot: {
-          ...snapshot,
-          session: {
-            ...snapshot.session,
-            overlayVisible: !snapshot.session.overlayVisible,
-          },
+      const nextSnapshot = {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          overlayVisible: !snapshot.session.overlayVisible,
         },
+      }
+      persistBrowserSnapshot(nextSnapshot)
+      set({
+        snapshot: nextSnapshot,
         error: null,
       })
       return
@@ -331,24 +380,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return
       }
 
-      const draft = buildCopilotDraft(
+      const nextSnapshot = {
+        ...snapshot,
         settings,
-        get().playbooks,
-        snapshot.session.transcript,
-        snapshot.session.screenContext,
-      )
+        session: applyDraftToSession({ ...snapshot, settings }, get().playbooks),
+      }
+      persistBrowserSnapshot(nextSnapshot)
       set({
-        snapshot: {
-          ...snapshot,
-          settings,
-          session: {
-            ...snapshot.session,
-            suggestions: draft.suggestions,
-            liveSummary: draft.liveSummary,
-            notes: draft.notes,
-            emailDraft: draft.emailDraft,
-          },
-        },
+        snapshot: nextSnapshot,
         error: null,
       })
       return
@@ -372,16 +411,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
         ? snapshot
         : {
             ...snapshot,
-            session: {
-              ...snapshot.session,
-              ...buildCopilotDraft(
-                snapshot.settings,
-                nextPlaybooks,
-                snapshot.session.transcript,
-                snapshot.session.screenContext,
-              ),
-            },
+            session: applyDraftToSession(snapshot, nextPlaybooks),
           }
+    persistBrowserSnapshot(nextSnapshot)
     set({ playbooks: nextPlaybooks, snapshot: nextSnapshot })
   },
   togglePlaybook: (playbookId) => {
@@ -400,17 +432,23 @@ export const useAppStore = create<AppStore>((set, get) => ({
         ? snapshot
         : {
             ...snapshot,
-            session: {
-              ...snapshot.session,
-              ...buildCopilotDraft(
-                snapshot.settings,
-                nextPlaybooks,
-                snapshot.session.transcript,
-                snapshot.session.screenContext,
-              ),
-            },
+            session: applyDraftToSession(snapshot, nextPlaybooks),
           }
+    persistBrowserSnapshot(nextSnapshot)
     set({ playbooks: nextPlaybooks, snapshot: nextSnapshot })
+  },
+  replacePlaybooks: (playbooks) => {
+    persistPlaybooks(playbooks)
+    const snapshot = get().snapshot
+    const nextSnapshot =
+      snapshot == null
+        ? snapshot
+        : {
+            ...snapshot,
+            session: applyDraftToSession(snapshot, playbooks),
+          }
+    persistBrowserSnapshot(nextSnapshot)
+    set({ playbooks, snapshot: nextSnapshot })
   },
   injectTranscriptLine: (speaker, text) => {
     const snapshot = get().snapshot
@@ -429,26 +467,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
       },
     ]
 
-    const draft = buildCopilotDraft(
-      snapshot.settings,
-      get().playbooks,
-      nextTranscript,
-      snapshot.session.screenContext,
-    )
-
-    set({
-      snapshot: {
-        ...snapshot,
-        session: {
-          ...snapshot.session,
-          transcript: nextTranscript,
-          suggestions: draft.suggestions,
-          liveSummary: draft.liveSummary,
-          notes: draft.notes,
-          emailDraft: draft.emailDraft,
-        },
-      },
-    })
+    const nextSnapshot = {
+      ...snapshot,
+      session: applyDraftToSession(snapshot, get().playbooks, {
+        transcript: nextTranscript,
+      }),
+    }
+    persistBrowserSnapshot(nextSnapshot)
+    set({ snapshot: nextSnapshot })
   },
   addScreenInsight: (headline, detail) => {
     const snapshot = get().snapshot
@@ -466,25 +492,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ...snapshot.session.screenContext,
     ].slice(0, 4)
 
-    const draft = buildCopilotDraft(
-      snapshot.settings,
-      get().playbooks,
-      snapshot.session.transcript,
-      nextScreenContext,
-    )
-
-    set({
-      snapshot: {
-        ...snapshot,
-        session: {
-          ...snapshot.session,
-          screenContext: nextScreenContext,
-          suggestions: draft.suggestions,
-          liveSummary: draft.liveSummary,
-          notes: draft.notes,
-          emailDraft: draft.emailDraft,
-        },
-      },
-    })
+    const nextSnapshot = {
+      ...snapshot,
+      session: applyDraftToSession(snapshot, get().playbooks, {
+        screenContext: nextScreenContext,
+      }),
+    }
+    persistBrowserSnapshot(nextSnapshot)
+    set({ snapshot: nextSnapshot })
   },
 }))

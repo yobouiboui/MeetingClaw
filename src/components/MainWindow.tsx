@@ -23,6 +23,7 @@ export function MainWindow() {
   const saveSettings = useAppStore((state) => state.saveSettings)
   const addPlaybook = useAppStore((state) => state.addPlaybook)
   const togglePlaybook = useAppStore((state) => state.togglePlaybook)
+  const replacePlaybooks = useAppStore((state) => state.replacePlaybooks)
   const injectTranscriptLine = useAppStore((state) => state.injectTranscriptLine)
   const addScreenInsight = useAppStore((state) => state.addScreenInsight)
 
@@ -146,6 +147,7 @@ export function MainWindow() {
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <PlaybooksPanel
             onCreate={addPlaybook}
+            onReplace={replacePlaybooks}
             onToggle={togglePlaybook}
             playbooks={playbooks}
           />
