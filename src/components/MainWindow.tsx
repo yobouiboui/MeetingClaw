@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { Activity, Gauge, Layers3, Mic, MonitorSmartphone, Sparkles } from 'lucide-react'
 import { formatTimestamp } from '../lib/format'
 import { useAppStore } from '../store/app-store'
 import { HistoryPanel } from './HistoryPanel'
 import { NotesPanel } from './NotesPanel'
+import { PlaybooksPanel } from './PlaybooksPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { ShellCard } from './ShellCard'
 import { StatusBadge } from './StatusBadge'
@@ -10,11 +12,15 @@ import { SuggestionsPanel } from './SuggestionsPanel'
 import { TranscriptPanel } from './TranscriptPanel'
 
 export function MainWindow() {
+  const [historyQuery, setHistoryQuery] = useState('')
   const snapshot = useAppStore((state) => state.snapshot)
+  const playbooks = useAppStore((state) => state.playbooks)
   const startMeeting = useAppStore((state) => state.startMeeting)
   const stopMeeting = useAppStore((state) => state.stopMeeting)
   const toggleOverlayWindow = useAppStore((state) => state.toggleOverlayWindow)
   const saveSettings = useAppStore((state) => state.saveSettings)
+  const addPlaybook = useAppStore((state) => state.addPlaybook)
+  const togglePlaybook = useAppStore((state) => state.togglePlaybook)
 
   if (!snapshot) {
     return (
@@ -124,9 +130,37 @@ export function MainWindow() {
                 ))}
               </div>
             </ShellCard>
-            <HistoryPanel history={history} />
+            <HistoryPanel history={history} onQueryChange={setHistoryQuery} query={historyQuery} />
           </div>
           <SettingsPanel onSave={(next) => void saveSettings(next)} settings={settings} />
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <PlaybooksPanel
+            onCreate={addPlaybook}
+            onToggle={togglePlaybook}
+            playbooks={playbooks}
+          />
+          <ShellCard
+            title="Prompt routing"
+            subtitle="Live prompt composition preview from meeting mode, provider and active playbooks."
+          >
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-950/45 p-4">
+              <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Realtime composition</p>
+              <pre className="whitespace-pre-wrap text-sm leading-6 text-slate-200">
+                {[
+                  `Meeting mode: ${settings.meetingMode}`,
+                  `Language: ${settings.preferredLanguage}`,
+                  `Provider: ${settings.aiProvider}`,
+                  '',
+                  'Active playbooks:',
+                  ...playbooks
+                    .filter((playbook) => playbook.active)
+                    .map((playbook) => `- ${playbook.name}: ${playbook.instructions}`),
+                ].join('\n')}
+              </pre>
+            </div>
+          </ShellCard>
         </div>
       </div>
     </main>

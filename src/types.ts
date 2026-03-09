@@ -31,6 +31,15 @@ export type MeetingRecord = {
   transcriptPreview: string
 }
 
+export type Playbook = {
+  id: string
+  name: string
+  summary: string
+  instructions: string
+  tags: string[]
+  active: boolean
+}
+
 export type AppSettings = {
   preferredLanguage: string
   aiProvider: string
